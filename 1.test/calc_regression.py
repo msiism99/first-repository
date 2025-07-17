@@ -10,7 +10,7 @@ from config import OUTLIER_THRESHOLD, DMARGIN_X, DMARGIN_Y, OUTLIER_SPEC_RATIO
 
 
 from design_matrix import osr_wk6p_rk6p, osr_wk20p_rk15p, osr_wk20p_rk18p, osr_wk20p_rk19p, osr_wk20p_rk20p
-from design_matrix import cpe_15para, cpe_18para, cpe_6para, cpe_20para, cpe_k_to_fit
+from design_matrix import cpe_15para, cpe_18para, cpe_6para, cpe_20para, cpe_38para, cpe_k_to_fit
 
 from design_matrix import DESIGN_MATRIX_FUNCTIONS
 
@@ -19,6 +19,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import time
+import os
 
 
 # Function to extract coordinates
@@ -450,7 +451,47 @@ def psm_decorrect(df_rawdata, df_psm_input, cpe_fit_option=DEFAULT_CPE_FIT_OPTIO
     return df_psm_de
 
 
-def g_optimal(X, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas, cpe_option='38para' ):
+
+
+'''
+def g_optimal(X_past, die_x, die_y, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas,rx,ry, cpe_option='38para' ):
+
+    rx_nor = rx / chip_pitch_x
+    ry_nor = ry / chip_pitch_y
+
+    def virtual_38(rx, ry):
+
+        X_dx = np.vstack([
+            np.ones(len(rx)),
+            rx, -ry,
+            (rx ** 2), (rx * ry), (ry ** 2),
+            (rx ** 3), (rx ** 2 * ry), (rx * ry ** 2), (ry ** 3),
+            (rx ** 3 * ry), (rx ** 2 * ry ** 2), (rx * ry ** 3), (ry ** 4),
+            (rx ** 3 * ry ** 2), (rx ** 2 * ry ** 3), (rx * ry ** 4), (ry ** 5),
+            (rx ** 3 * ry ** 3), (rx ** 2 * ry ** 4),
+            (rx ** 3 * ry ** 4)
+        ]).T
+
+        X_dy = np.vstack([
+            np.ones(len(ry)),
+            ry, rx,
+            (ry ** 2), (ry * rx), (rx ** 2),
+            (ry ** 3), (ry ** 2 * rx), (ry * rx ** 2),
+            (ry ** 4), (ry ** 3 * rx), (ry ** 2 * rx ** 2),
+            (ry ** 5), (ry ** 4 * rx) , (ry ** 3 * rx ** 2),
+            (ry ** 5 * rx), (ry ** 4 * rx ** 2)
+        ]).T  
+        return X_dx, X_dy
+    
+    Xm_dx, Xm_dy = virtual_38(rx_nor,ry_nor)
+
+
+    if X_past.shape[1] == 21:
+        X = Xm_dx
+    else:
+        X = Xm_dy
+
+
     dm_func = DESIGN_MATRIX_FUNCTIONS['cpe'][cpe_option]
     ridge_term = lam * np.diag(lambdas)
     x_values = np.linspace(chip_center_x-0.5*chip_pitch_x,chip_center_x+0.5*chip_pitch_x,10)
@@ -459,74 +500,316 @@ def g_optimal(X, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, 
     for i in x_values:
         for j in y_values:
             if (i**2+j**2)**0.5 < 144000:
-                coordinates.append(((i-chip_center_x)*10**-6, (j-chip_center_y)*10**-6))        
+                #print((i**2+j**2)**0.5)
+                coordinates.append(((i-chip_center_x)/chip_pitch_x, (j-chip_center_y)/chip_pitch_y))        
     df_vir = pd.DataFrame(coordinates, columns=['coordinate_X', 'coordinate_Y'])
-    num_vir = df_vir.shape[0]
-    num_vir = int(num_vir)
+    #num_vir = df_vir.shape[0]
+    #num_vir = int(num_vir)
+    # print('df_vir', df_vir)
+    # print(die_x,die_y)
+    #print('X', X)
     df_vir['coordinate_X'] = df_vir['coordinate_X'].astype(float)
     df_vir['coordinate_Y'] = df_vir['coordinate_Y'].astype(float)
 
+    
+
     rx2 = df_vir['coordinate_X'].values
-    ry2 = df_vir['coordinate_Y'].values    
-    X_dx2, X_dy2 = dm_func(rx2, ry2)
+    ry2 = df_vir['coordinate_Y'].values
+
+    X_dx2, X_dy2 = virtual_38(rx2,ry2)
+
     if X.shape[1] == 21:
         X_ver = X_dx2
     else:
         X_ver = X_dy2
-    X_trans = np.transpose(X)
-    X_mul = np.dot(X_trans,X)
-    X_mul_p = X_mul + ridge_term
-    X_inv = np.linalg.inv(X_mul_p)
-    X_mul2 = np.dot(X_ver,X_inv)
-    X_df = np.dot(X_mul2,X_trans)
-    X_df_trans = np.transpose(X_df)
-    X_df_mul = np.dot(X_df,X_df_trans)
-    X_df_mul = pd.DataFrame(X_df_mul)
-    diagonal_elements1 = pd.DataFrame(np.diag(X_df_mul.values))
-    max_value_X = np.max(diagonal_elements1)
-    G_OPT = round(max_value_X**0.5,3)
-
-    
-
-    return G_OPT,lam
 
 
-def ridge_regression(X, Y, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam=0):
+    XtX = X.T @ X
+    XtX_ridge = XtX + ridge_term
+    # solve를 사용해 수치적으로 안전한 해 구함
+    X_df = X_ver @ np.linalg.solve(XtX_ridge, X.T)
+    # 각 row의 제곱합 (== 대각 요소에 해당)
+    leverage = np.sum(X_df**2, axis=1)
+    G_OPT = round(np.sqrt(np.max(leverage)), 3)
+    #if die_x == -4 and die_y == 4 :
+    #    print(die_x, die_y, G_OPT, lam)
 
-    #print(X,Y)
+    return G_OPT
+
+
+
+def ridge_regression(X, Y, die_x, die_y,chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, rx, ry, lam_init=0.0):
     if X.shape[1] == 21:
         lambdas = [0,0.01,0.01,1,1,0.1,1,1,1,0.1,1,1,1,1,1,1,1,1,1,1,1]
     else:
         lambdas = [0,0.01,0.01,0.1,0.1,1,0.1,0.1,1,1,1,1,1,1,1,1,1]
 
+    def find_x_for_y_099(lam_p2, g_opt_p2, lam_p1, g_opt_p1, target_y=0.999):
+        # 기울기 a, 절편 b 계산
+        a = (g_opt_p1 - g_opt_p2) / (lam_p1 - lam_p2)
+        b = g_opt_p2 - a * lam_p2
+
+        # y = target_y일 때 x 계산
+        if a == 0:
+            x_at_target_y = lam_p1 + 0.1
+        else:
+            x_at_target_y = (target_y - b) / a
+        if x_at_target_y < 0:
+            x_at_target_y = lam_p1 - 0.5*(lam_p2 - lam_p1)
+
+        return x_at_target_y
+
+    lam = lam_init
+    g_opt = g_optimal(X, die_x, die_y,chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas, rx, ry)
+
+    if g_opt>1:
+            
+        for i in range(0,50):
+            
+            if i == 0:
+                lam_p1 = lam
+                g_opt_p1 = g_opt
+                if g_opt>100:
+                    lam = 0.1
+                elif g_opt>50:
+                    lam = 0.03
+                elif g_opt>10:
+                    lam = 0.02
+                else:
+                    lam = 0.005
+                g_opt = g_optimal(X, die_x, die_y, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas, rx, ry)
+
+            elif i == 1:
+                lam_p2, lam_p1, g_opt_p2, g_opt_p1 = lam_p1, lam, g_opt_p1, g_opt
+                if g_opt_p2 > 1 and g_opt_p1 > 1:
+                    lam = lam + (lam_p1 - lam_p2)/2
+                    g_opt = g_optimal(X, die_x, die_y, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas, rx, ry)
+                else:
+                    lam = lam - (lam_p1 - lam_p2)/2
+                    g_opt = g_optimal(X, die_x, die_y, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas, rx, ry)
+            
+            elif i == 2:
+                lam_p3, lam_p2, lam_p1, g_opt_p3, g_opt_p2, g_opt_p1 = lam_p2, lam_p1, lam, g_opt_p2,g_opt_p1, g_opt
+                if g_opt_p1 > 1:
+                    lam = lam + (lam_p1 - lam_p2)/2
+                    g_opt = g_optimal(X, die_x, die_y, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas, rx, ry)
+                else:
+                    lam = lam - abs(lam_p1 - lam_p2)/2
+                    g_opt = g_optimal(X, die_x, die_y, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas, rx, ry)
+
+            elif i == 3:
+                lam_p3, lam_p2, lam_p1, g_opt_p3, g_opt_p2, g_opt_p1 = lam_p2, lam_p1, lam, g_opt_p2,g_opt_p1, g_opt
+                if g_opt_p1 > 1:
+                    lam = lam + (lam_p1 - lam_p2)/2
+                    g_opt = g_optimal(X, die_x, die_y, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas, rx, ry)
+                else:
+                    lam = lam - abs(lam_p1 - lam_p2)/2
+                    g_opt = g_optimal(X, die_x, die_y, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas, rx, ry)            
+
+            else:
+                lam_p3, lam_p2, lam_p1, g_opt_p3, g_opt_p2, g_opt_p1 = lam_p2, lam_p1, lam, g_opt_p2,g_opt_p1, g_opt
+                lam = find_x_for_y_099(lam_p2, g_opt_p2, lam_p1, g_opt_p1, target_y=0.999)
+                g_opt = g_optimal(X, die_x, die_y, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas, rx, ry)
+            
+            #if die_x == -4 and die_y == 4 and i > 2 :
+                #print('i=', i, lam_p3, lam_p2, lam_p1,lam, g_opt_p3, g_opt_p2, g_opt_p1, g_opt)
+
+            if 0.999 <= g_opt <= 1.0 or i == 49:
+                print(i, die_x, die_y, g_opt, round(lam,5))
+                break
+
+
+
+    # 회귀 수행
     XtX = X.T @ X
     Xty = X.T @ Y
     ridge_term = lam * np.diag(lambdas)
-    g_opt_pm = 1
-    g_opt,lam = g_optimal(X, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas)
+    beta = np.linalg.inv(XtX + ridge_term) @ Xty
 
-    if g_opt > 1:
-        while True:
+    return beta
+'''
 
-            if 0.9<=g_opt<=1.0:
-                break
 
-            if g_opt>1:
-                lam = lam + g_opt_pm
-                g_opt_pm = g_opt_pm/2
-            else:
-                lam = lam - g_opt_pm
-                g_opt_pm = g_opt_pm/2
 
-            #time.sleep(0.5)
-            print(g_opt,lam,g_opt_pm,lambdas)
-            g_opt,lam = g_optimal(X, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam, lambdas)
 
-    print(g_opt)
+
+
+
+def g_optimal(X,chip_pitch_x,chip_pitch_y,chip_center_x,chip_center_y,lam,lambdas,cpe_option='38para'):
+    dm_func = DESIGN_MATRIX_FUNCTIONS['cpe'][cpe_option]
 
     ridge_term = lam * np.diag(lambdas)
-    beta = np.linalg.inv(XtX + ridge_term) @ Xty
+
+    x_values = np.linspace(
+        chip_center_x - 0.5 * chip_pitch_x,
+        chip_center_x + 0.5 * chip_pitch_x,
+        10
+    )
+    y_values = np.linspace(
+        chip_center_y - 0.5 * chip_pitch_y,
+        chip_center_y + 0.5 * chip_pitch_y,
+        10
+    )
+
+    coordinates = []
+    for i in x_values:
+        for j in y_values:
+            r = np.sqrt(i ** 2 + j ** 2)
+            if r < 144000:
+                coordinates.append(
+                    ((i - chip_center_x) * 1e-6, (j - chip_center_y) * 1e-6)
+                )
+
+    if not coordinates:
+        raise ValueError("No valid virtual coordinates generated within 144000 radius.")
+
+    coords = np.array(coordinates)
+    rx2 = coords[:, 0]
+    ry2 = coords[:, 1]
+
+    X_dx2, X_dy2 = dm_func(rx2, ry2)
+
+    if X.shape[1] == 21:
+        X_ver = X_dx2
+    else:
+        X_ver = X_dy2
+
+    XtX_ridge = X.T @ X + ridge_term
+
+    try:
+        temp = np.linalg.solve(XtX_ridge, X.T)
+        X_df = X_ver @ temp
+    except np.linalg.LinAlgError:
+        raise RuntimeError("Matrix inversion failed in ridge regression.")
+
+    leverage = np.sum(X_df ** 2, axis=1)
+    g_opt = round(np.sqrt(np.max(leverage)), 3)
+    print(g_opt)
+    return g_opt, lam
+
+def ridge_regression(
+    X,
+    Y,
+    chip_pitch_x,
+    chip_pitch_y,
+    chip_center_x,
+    chip_center_y,
+    lam=0.0
+):
+    """
+    Ridge 회귀 + lam 최적화
+
+    Parameters
+    ----------
+    X : ndarray (n_samples, n_features)
+    Y : ndarray (n_samples,)
+    chip_pitch_x, chip_pitch_y : float
+    chip_center_x, chip_center_y : float
+    lam : float, default=0.0
+        0.0이면 자동으로 경사하강법으로 찾음
+
+    Returns
+    -------
+    beta : ndarray (n_features,)
+    """
+
+    # 항별 lambda 설정
+    if X.shape[1] == 21:
+        lambdas = [0,0.01,0.01,1,1,0.1,1,1,1,0.1,1,1,1,1,1,1,1,1,1,1,1]
+    else:
+        lambdas = [0,0.01,0.01,0.1,0.1,1,0.1,0.1,1,1,1,1,1,1,1,1,1]
+
+    # lam=0이면 경사하강법으로 탐색
+    if lam == 0.0:
+        lam = optimize_lambda_gd(
+            X,
+            chip_pitch_x,
+            chip_pitch_y,
+            chip_center_x,
+            chip_center_y,
+            lambdas,
+            initial_lambda=0.1,
+            lr=0.5,
+            max_iter=30,
+            tol=1e-4
+        )
+
+    XtX = X.T @ X
+    Xty = X.T @ Y
+    ridge_term = lam * np.diag(lambdas)
+
+    beta = np.linalg.solve(XtX + ridge_term, Xty)
+
     return beta
+
+
+
+# ------------------------------
+# lambda 최적화 함수
+# ------------------------------
+def optimize_lambda_gd(
+    X,
+    chip_pitch_x,
+    chip_pitch_y,
+    chip_center_x,
+    chip_center_y,
+    lambdas,
+    initial_lambda=0.1,
+    lr=0.5,
+    max_iter=30,
+    tol=1e-4
+):
+    lam = initial_lambda
+
+    prev_loss = None
+
+    for i in range(max_iter):
+        g_opt, _ = g_optimal(
+            X,
+            chip_pitch_x,
+            chip_pitch_y,
+            chip_center_x,
+            chip_center_y,
+            lam,
+            lambdas
+        )
+        loss = (g_opt - 1.0) ** 2
+
+        if loss < tol:
+            break
+
+        # 수치 미분
+        eps = 1e-4
+        g_opt_eps, _ = g_optimal(
+            X,
+            chip_pitch_x,
+            chip_pitch_y,
+            chip_center_x,
+            chip_center_y,
+            lam + eps,
+            lambdas
+        )
+        loss_eps = (g_opt_eps - 1.0) ** 2
+
+        grad = (loss_eps - loss) / eps
+
+        # gradient descent update
+        lam = lam - lr * grad
+
+        # lam 음수 방지
+        lam = max(lam, 0.0)
+
+        # 변화가 너무 적으면 조기 종료
+        if prev_loss is not None and abs(prev_loss - loss) < 1e-8:
+            break
+
+        prev_loss = loss
+    print(chip_center_x,chip_center_y,i,g_opt)
+    return lam
+
+
+
+
 
 
 
@@ -536,6 +819,7 @@ def ridge_regression(X, Y, chip_pitch_x, chip_pitch_y, chip_center_x, chip_cente
 # Function to model residuals using CPE 19-parameter model
 
 def resi_to_cpe(df_rawdata, cpe_option=DEFAULT_CPE_OPTION):
+
     """
     CPE 보정을 위한 회귀분석을 수행합니다.
     각 그룹(UNIQUE_ID, DieX, DieY)에서 residual_x_depsm, residual_y_depsm을 대상으로 
@@ -573,8 +857,9 @@ def resi_to_cpe(df_rawdata, cpe_option=DEFAULT_CPE_OPTION):
         X_dx, X_dy = dm_func(rx, ry)
 
         if cpe_option == '38para':
-            coeff_dx = ridge_regression(X_dx, Yx, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam=0)
-            coeff_dy = ridge_regression(X_dy, Yy, chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam=0)
+            coeff_dx = ridge_regression(X_dx, Yx,chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam=0)
+            coeff_dy = ridge_regression(X_dy, Yy,chip_pitch_x, chip_pitch_y, chip_center_x, chip_center_y, lam=0)
+
         else:
             coeff_dx = np.linalg.lstsq(X_dx, Yx, rcond=None)[0]
             coeff_dy = np.linalg.lstsq(X_dy, Yy, rcond=None)[0]
@@ -753,7 +1038,7 @@ def cpe_k_to_fit(df_rawdata, df_cpe_k):
         residual_y_depsm = group['residual_y_depsm'].values
 
 
-        X_dx, X_dy = cpe_20para(rx, ry)
+        X_dx, X_dy = cpe_38para(rx, ry)
 
         cpe_row = df_cpe_k[
             (df_cpe_k['UNIQUE_ID'] == unique_id) &
@@ -762,12 +1047,12 @@ def cpe_k_to_fit(df_rawdata, df_cpe_k):
         ]
 
         if cpe_row.empty:
-            Y_dx = np.zeros(10)
-            Y_dy = np.zeros(10)
+            Y_dx = np.zeros(21)
+            Y_dy = np.zeros(17)
         else:
-            rk_values = cpe_row.iloc[:, 4:24]
-            Y_dx = rk_values.iloc[:, ::2].values.flatten()
-            Y_dy = rk_values.iloc[:, 1::2].values.flatten()
+            rk_values = cpe_row.iloc[:, 4:69]
+            Y_dx = rk_values.iloc[:,[0,2,4,6,8,10,12,14,16,18,22,24,26,28,34,36,38,40,48,50,64]].values.flatten()
+            Y_dy = rk_values.iloc[:,[1,3,5,7,9,11,13,15,17,21,23,25,31,33,35,45,47]].values.flatten()
 
         cpe_pred_x = X_dx.dot(Y_dx)
         cpe_pred_y = X_dy.dot(Y_dy)
@@ -815,3 +1100,4 @@ def delta_psm(df_rawdata):
     df_rawdata['delta_psm_y'] = df_rawdata['ideal_psm_y'] - df_rawdata['psm_fit_y']
     return df_rawdata
 
+# end
