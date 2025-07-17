@@ -133,6 +133,35 @@ def osr_wk6p_rk6p(x, y, rx, ry):
 
 
 # ----- CPE 디자인 행렬 -----
+'''
+def cpe_38para(rx, ry):
+    """
+    RK 38para 모델 : 고차 다항식을 포함하는 CPE 모델
+    """
+    X_dx = np.vstack([
+        np.ones(len(rx)),
+        rx / 1e6, -ry / 1e6,
+        (rx ** 2) / 1e9, (rx * ry) / 1e9, (ry ** 2) / 1e9,
+        (rx ** 3) / 1e12, (rx ** 2 * ry) / 1e12, (rx * ry ** 2) / 1e12, (ry ** 3) / 1e12,
+        (rx ** 4) / 1e19, (rx ** 3 * ry) / 1e19, (rx ** 2 * ry ** 2) / 1e19, (rx * ry ** 3) / 1e19, (ry ** 4) / 1e19,
+        (rx ** 5) / 1e23, (rx ** 4 * ry ** 1) / 1e23, (rx ** 3 * ry ** 2) / 1e23, (rx ** 2 * ry ** 3) / 1e23, (rx * ry ** 4) / 1e23, (ry ** 5) / 1e23,
+        (rx ** 6) / 1e27, (rx ** 5 * ry ** 1) / 1e27, (rx ** 4 * ry ** 2) / 1e27, (rx ** 3 * ry ** 3) / 1e27, (rx ** 2 * ry ** 4) / 1e27,(rx * ry ** 5) / 1e27,(ry ** 6) / 1e27,
+        (rx ** 7) / 1e31, (rx ** 6 * ry ** 1) / 1e31, (rx ** 5 * ry ** 2) / 1e31, (rx ** 4 * ry ** 3) / 1e31, (rx ** 3 * ry ** 4) / 1e31
+    ]).T
+
+    X_dy = np.vstack([
+        np.ones(len(ry)),
+        ry / 1e6, rx / 1e6,
+        (ry ** 2) / 1e9, (ry * rx) / 1e9, (rx ** 2) / 1e9,
+        (ry ** 3) / 1e12, (ry ** 2 * rx) / 1e12, (ry * rx ** 2) / 1e12, (rx ** 3) / 1e12,
+        (ry ** 4) / 1e19, (ry ** 3 * rx) / 1e19, (ry ** 2 * rx ** 2) / 1e19, (ry * rx ** 3) / 1e19, (rx ** 4) / 1e19,
+        (ry ** 5) / 1e23, (ry ** 4 * rx) / 1e23, (ry ** 3 * rx ** 2) / 1e23, (ry ** 2 * rx ** 3) / 1e23, (ry * rx ** 4) / 1e23, (rx ** 5) / 1e23,
+        (ry ** 6) / 1e27, (ry ** 5 * rx) / 1e27, (ry ** 4 * rx ** 2) / 1e27, (ry ** 3 * rx ** 3) / 1e27, (ry ** 2 * rx ** 4) / 1e27, (ry * rx ** 5) / 1e27, (rx ** 6) / 1e27,
+        (ry ** 7) / 1e31, (ry ** 6 * rx ** 1) / 1e31, (ry ** 5 * rx ** 2) / 1e31, (ry ** 4 * rx ** 3) / 1e31
+    ]).T  
+    return X_dx, X_dy
+'''
+
 
 def cpe_38para(rx, ry):
     """
@@ -159,10 +188,6 @@ def cpe_38para(rx, ry):
         (ry ** 5 * rx) / 1e27, (ry ** 4 * rx ** 2) / 1e27
     ]).T  
     return X_dx, X_dy
-
-
-        
-
 
 
 
