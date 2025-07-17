@@ -1,9 +1,7 @@
 # config.py
 # 설정 파일: 각종 경로 및 상수를 정의합니다.
 
-# nau 파일이 저장된 기본 폴더 경로
-FOLDER_PATH = 'C:/py_data/nau/test/adi' #'C:/PSM SIM/TEST2_로직확인용/2. PRO버전 1매만/adi' #'C:/PSM SIM/250328 D1b GBL 어떻게 할지/시뮬3/1.nau'  #'C:/py_data/nau/1lot'
-
+FOLDER_PATH = 'C:/users/sungil.moon/Desktop/8Y40M/code/OTS/nau'
 PROCESS_MODE = 'ADI'  #'ADI', 'OCO'  둘중에 하나만 입력가능
 
 
