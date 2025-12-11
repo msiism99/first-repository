@@ -1,0 +1,182 @@
+
+from A_config import FOLDER_PATH,RESULT
+import pandas as pd
+import numpy as np
+from datetime import datetime
+import os
+import glob
+import xlwings as xw
+
+from A_calc_regression import (
+    kmrc_decorrect,
+    remove_psm_add_pointmrc,
+    regression,
+    psm_decorrect,
+    resi_to_cpe,
+    psm_correct
+)
+
+def main():
+    nau_path = os.path.join(FOLDER_PATH,'*.nau')
+    site = glob.glob(nau_path)
+
+    for i in range(len(site)):
+
+        app = xw.App(visible=False)
+        wb = xw.Book(site[i])
+
+        # file name으로 info 추가목적
+        filename = os.path.basename(site[i])
+        parts = filename.split('_')
+        new_col1 = ['MSTEP', 'WF', 'E_number']
+        new_col2 = [parts[1], parts[4], parts[5]]
+        new_rows = pd.DataFrame({'info': new_col1,'value': new_col2})
+        lot_wf = parts[0].split('.')[0] + "_" + parts[4]
+
+        # nau data 긁어오기
+        ws_raw = wb.sheets['RawData-1']
+        ws_PSM = wb.sheets['PerShotMRC']
+        ws_TROCS = wb.sheets['Trocs Input']
+
+        # reg_code 추출
+        df_TROCS = pd.DataFrame(ws_TROCS.range('A1').options(expand='table').value[1:], columns=ws_TROCS.range('A1').options(expand='table').value[0])
+        reg_code = (df_TROCS.iloc[0, 4:] != 0).sum()
+        if reg_code == 38:
+            osr_option = '19para'
+            cpe_option = '38para'
+        elif reg_code == 33:
+            osr_option = '18para'
+            cpe_option = '33para'
+        elif reg_code == 19:
+            osr_option = '19para'
+            cpe_option = '19para'
+        elif reg_code == 18:
+            osr_option = '18para'
+            cpe_option = '18para'
+        else:
+            osr_option = '6para'
+            cpe_option = '6para'
+
+        # type_code 추출
+        if parts[1][5:] == '040':
+            type_code = 'ADI'
+        elif parts[1][5:] == '720':
+            type_code = 'ADI'
+        else:
+            type_code = 'OCO'
+
+        
+
+        # nau data 가공
+        df_raw = pd.DataFrame(ws_raw.range('A1').options(expand='table').value[1:], columns=ws_raw.range('A1').options(expand='table').value[0]).iloc[:, :8]
+        
+        # test number 정하기
+        test_series = df_raw['TEST']
+        if type_code == 'OCO':
+            df_raw = df_raw[(test_series >= 81) & (test_series <= 160)]
+        
+        df_info = pd.DataFrame(ws_raw.range('M1').options(expand='table').value, columns=['info','value'])
+        df_info = df_info.iloc[[0,2,3,4,5,7,8,9,10,12,13,14,15,16,17,18,19,20,26,27]]
+        for col_name, col_value in zip(df_info.iloc[:, 0], df_info.iloc[:, 1]):
+            df_raw[col_name] = col_value
+
+        df_info = pd.concat([df_info, new_rows], ignore_index=True)
+        df_KMRC_WK = pd.DataFrame(ws_raw.range('P1').options(expand='table').value, columns=['K','value'])
+        df_KMRC_FK = pd.DataFrame(ws_raw.range('P23').options(expand='table').value, columns=['K','value'])
+        #df_temp = pd.DataFrame([['R1',0],['R2',0]], columns=['K','value'])
+        df_KMRC = pd.concat([df_KMRC_WK, df_KMRC_FK], ignore_index=True)
+        df_points = pd.DataFrame(ws_raw.range('S1').options(expand='table').value[1:], columns=ws_raw.range('S1').options(expand='table').value[0]).iloc[:, :3]
+
+        df_PSM = pd.DataFrame(ws_PSM.range('A1').options(expand='table').value[1:], columns=ws_PSM.range('A1').options(expand='table').value[0])
+        df_raw = df_raw.merge(df_points, left_on='TEST', right_on = 'Test No', how='left')
+
+        df_raw['fcp_x'] = (df_raw['DieX'] * df_raw['STEP_PITCH_X'] + df_raw['MAP_SHIFT_X'])
+        df_raw['fcp_y'] = (df_raw['DieY'] * df_raw['STEP_PITCH_Y'] + df_raw['MAP_SHIFT_Y'])
+        df_raw['wf_x'] = (df_raw['DieX'] * df_raw['STEP_PITCH_X'] + df_raw['MAP_SHIFT_X'] + df_raw['coordinate_X'])
+        df_raw['wf_y'] = (df_raw['DieY'] * df_raw['STEP_PITCH_Y'] + df_raw['MAP_SHIFT_Y'] + df_raw['coordinate_Y'])
+        df_raw['radius'] = np.sqrt(df_raw['wf_x'] ** 2 + df_raw['wf_y'] ** 2)
+        df_raw['fcp_x'] = df_raw['fcp_x'].round(6)
+        df_raw['fcp_y'] = df_raw['fcp_y'].round(6)
+        df_raw = df_raw[['STEP_PITCH_X','STEP_PITCH_Y','MAP_SHIFT_X','MAP_SHIFT_Y','num_of_chip_X','num_of_chip_Y',
+                         'Photo_PPID','Base_EQP1','Base_EQP2','Base_EQP3','MMO MRC Step','MMO MRC Eqp','P_EQPID','ReticleID',
+                         'P_TIME','LOTID','Wafer','TEST','DieX','DieY','coordinate_X','coordinate_Y','fcp_x','fcp_y','wf_x','wf_y','radius',
+                         'X_reg','Y_reg','MRC_X','MRC_Y'
+                        ]]
+
+        
+
+        # MRC decorrect
+        mrc_list = kmrc_decorrect(df_raw, df_KMRC)
+        df_raw = pd.concat([df_raw, mrc_list], axis=1)
+        
+        # PSM + point MRC decorrect
+        df_raw = remove_psm_add_pointmrc(df_raw)
+
+        # raw data regression
+        df_coeff = regression(df_raw,osr_option,lot_wf,type_code)
+
+        # PSM decorrect
+        if type_code == 'OCO':
+            df_psm_de = psm_decorrect(df_raw,df_PSM)
+            df_raw = pd.concat([df_raw, df_psm_de], axis=1)
+
+            df_cpe_k = resi_to_cpe(df_raw, cpe_option, lot_wf)
+
+            df_cpe_fit_res = psm_correct(df_raw, df_cpe_k)
+            df_raw = pd.concat([df_raw, df_cpe_fit_res], axis=1)
+
+
+        else:
+            df_raw.rename(columns={'residual_x': 'residual_x_depsm'}, inplace=True)
+            df_raw.rename(columns={'residual_y': 'residual_y_depsm'}, inplace=True)
+        
+
+        # excel file로 검증
+        with pd.ExcelWriter(os.path.join(RESULT, "datas.xlsx")) as writer:
+            df_raw.to_excel(writer, sheet_name='raw', index=False)
+            df_info.to_excel(writer, sheet_name='info', index=False)
+            df_KMRC.to_excel(writer, sheet_name='MRC', index=False)
+            df_PSM.to_excel(writer, sheet_name='PSM', index=False)
+            df_TROCS.to_excel(writer, sheet_name='TROCS', index=False)
+            df_coeff.to_excel(writer, sheet_name='OSR_K', index=False)
+            df_cpe_k.to_excel(writer, sheet_name='CPE_K', index=False)
+        
+        wb.close()
+        app.quit()
+
+
+
+
+
+        
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+if __name__ == '__main__':
+    main()
