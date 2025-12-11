@@ -1,0 +1,41 @@
+rows_to_add_1 = []
+rows_to_add_2 = []
+# 90000 91000
+rows_to_add_1.append(['B',  -10000, 92000.0, B, 0, 0])
+rows_to_add_1.append(['B',  -10000, 93000.0, B, 0, 0])
+rows_to_add_1.append(['B',  -10000, 94000.0, B, 0, 0])
+rows_to_add_1.append(['B',  -10000, 95000.0, B, 0, 0])
+rows_to_add_1.append(['B',  -10000, 96000.0, B, 0, 0])
+rows_to_add_1.append(['B',  -10000, 97000.0, B, 0, 0])
+rows_to_add_1.append(['B',  -10000, 98000.0, B, 0, 0])
+rows_to_add_1.append(['B',  -10000, 99000.0, B, 0, 0])
+rows_to_add_1.append(['B',  -10000, 100000.0, B, 0, 0])
+rows_to_add_2.append(['B',  -10000, 101100.0, B, 0, 0])
+rows_to_add_2.append(['B',  -10000, 102200.0, B, 0, 0])
+rows_to_add_2.append(['B',  -10000, 103300.0, B, 0, 0])
+rows_to_add_2.append(['B',  -10000, 104400.0, B, 0, 0])
+rows_to_add_2.append(['B',  -10000, 105500.0, B, 0, 0])
+rows_to_add_2.append(['B',  -10000, 106600.0, B, 0, 0])
+rows_to_add_2.append(['B',  -10000, 107700.0, B, 0, 0])
+rows_to_add_2.append(['B',  -10000, 108800.0, B, 0, 0])
+rows_to_add_2.append(['B',  -10000, 109900.0, B, 0, 0])
+futures_1_B_simul = futures_1_B.copy()
+futures_2_B_simul = futures_2_B.copy()
+new_chunk1 = pd.DataFrame(rows_to_add_1, columns=futures_1_B.columns)
+new_chunk2 = pd.DataFrame(rows_to_add_2, columns=futures_2_B.columns)
+
+futures_1_B_simul = pd.concat([futures_1_B_simul, new_chunk1], ignore_index=True)
+futures_2_B_simul = pd.concat([futures_2_B_simul, new_chunk2], ignore_index=True)
+
+futures_1_B_simul['markPrice'] = 150000
+futures_2_B_simul['markPrice'] = 150000
+
+futures_1_B_simul['unRealizedProfit'] = futures_1_B_simul['positionAmt']*(1/futures_1_B_simul['entryPrice']-1/futures_1_B_simul['markPrice'])
+futures_1_B_simul['shut_price'] = shut(futures_1_B_simul,asset_B1)
+futures_2_B_simul['unRealizedProfit'] = futures_2_B_simul['positionAmt']*(1/futures_2_B_simul['entryPrice']-1/futures_2_B_simul['markPrice'])
+futures_2_B_simul['shut_price'] = shut(futures_2_B_simul,asset_B2)
+
+print(round(asset_B1+asset_B2+futures_1_B_simul['unRealizedProfit'].sum()+futures_2_B_simul['unRealizedProfit'].sum(),8))
+futures_1_B_simul, futures_2_B_simul
+
+#10.19923497
