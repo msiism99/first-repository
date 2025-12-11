@@ -1,0 +1,44 @@
+import pandas as pd
+
+asset_B1, asset_B2 = 4.68707262, 2.50550369
+asset_E = 12.69659755
+asset_X = 18783.4
+
+def shut(futures,asset):
+    futures_temp = futures.copy()
+    a,b = 70000,32768
+    while True:
+        futures_temp['markPrice'] = a
+        futures_temp['unRealizedProfit'] = futures_temp['positionAmt']*(1/futures_temp['entryPrice']-1/futures_temp['markPrice'])
+        c = futures_temp['unRealizedProfit'].sum()
+        if (asset + c)/asset > 0.025:
+            a = a - b
+            b = b/2
+        elif (asset + c)/asset < 0.0249:
+            a = a + b
+            b = b/2
+        else:
+            break
+    return a
+
+
+B,E,X = 92000,3300,2.08
+D = 1470
+
+futures_1 = pd.DataFrame(  [['B', 790000, 90051.3, B, 0],
+                            ['B',-230000, 89951.9, B, 0],
+                            ['E',      0, 3108.59, E, 0]],
+                            columns = ['symbol','positionAmt','entryPrice','markPrice','unRealizedProfit'])
+
+futures_2 = pd.DataFrame(  [['B', 520000, 95072.8, B, 0],
+                            ['B',-200000, 89890.9, B, 0],
+                            ['X',  30000,  2.3664, X, 0]],
+                            columns = ['symbol','positionAmt','entryPrice','markPrice','unRealizedProfit'])
+
+futures_1['unRealizedProfit'] = futures_1['positionAmt']*(1/futures_1['entryPrice']-1/futures_1['markPrice'])
+futures_2['unRealizedProfit'] = futures_2['positionAmt']*(1/futures_2['entryPrice']-1/futures_2['markPrice'])
+futures_1_B = futures_1[futures_1['symbol'] == 'B'].copy()
+futures_2_B = futures_2[futures_2['symbol'] == 'B'].copy()
+futures_1_B['shut_price'] = shut(futures_1_B,asset_B1)
+futures_2_B['shut_price'] = shut(futures_2_B,asset_B2)
+futures_1_B,futures_2_B
