@@ -21,14 +21,14 @@ else:
     sql_paramdata = f"""
     SELECT
       p.photo_transn_seq,
-      p.lotid,7
+      p.lotid,
       p.slotid,
       p.base_eqp_id1
     FROM ees_ds_eai.apc_nautil_paramdata p
     WHERE p.impala_insert_time >= now() - interval {days} days
       AND p.db_user = '{db_user}'
       AND p.photo_transn_seq IN ({photo_transn_seq_str})
-      AND p.subname = 'F1'7
+      AND p.subname = 'F1'
       {mstepseq_filter}
 
 
