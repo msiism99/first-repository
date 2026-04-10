@@ -1,17 +1,33 @@
 # 7
-# data_kind별로 분리
+
+# =========================================================
+# 0. 공통 함수: 중복 컬럼 제거
+# =========================================================
+def remove_duplicated_columns(df, name="df"):
+    dup_cols = df.columns[df.columns.duplicated()].tolist()
+    if dup_cols:
+        print(f"⚠️ {name} 중복 컬럼 제거: {dup_cols}")
+        df = df.loc[:, ~df.columns.duplicated()]
+    return df
+
+
+# =========================================================
+# 1. RAWDATA 분리
+# =========================================================
+
 if len(df_rawdata_adi) > 0:
-    # RAWDATA: TEST, DieX, DieY, X_reg, Y_reg
+    # RAWDATA
     df_raw_rawdata_adi = df_rawdata_adi[df_rawdata_adi['data_kind'] == 'RAWDATA'].copy()
     df_raw_rawdata_adi = df_raw_rawdata_adi.rename(columns={
         'test_point_no': 'TEST',
         'coordinate_x': 'DieX',
         'coordinate_y': 'DieY',
         'value_x': 'X_reg',
-        'value_y': 'Y_reg'     # Point MRC사용하는 경우에는 순수계측값이 아님.  value_y = Y_reg - MRC_RY    (즉, 순수계측값에서 Point MRC를 뺴준값이   RAWDATA에서의 Value값임.)
+        'value_y': 'Y_reg'
     })
-    
-    # TEST: coordinate_X, coordinate_Y, MRC_RX, MRC_RY
+    df_raw_rawdata_adi = remove_duplicated_columns(df_raw_rawdata_adi, "df_raw_rawdata_adi")
+
+    # TESTDATA
     df_raw_test_adi = df_rawdata_adi[df_rawdata_adi['data_kind'] == 'TESTDATA'].copy()
     df_raw_test_adi = df_raw_test_adi.rename(columns={
         'test_point_no': 'TEST',
@@ -20,23 +36,30 @@ if len(df_rawdata_adi) > 0:
         'mrc_x_valn': 'MRC_RX',
         'mrc_y_valn': 'MRC_RY'
     })
-    df_raw_test_adi = df_raw_test_adi[['lot_transn_seq', 'slot_id', 'TEST', 'coordinate_X', 'coordinate_Y', 'MRC_RX', 'MRC_RY']]
-    
-    # PERSHOTMRC: MRC_X, MRC_Y
+    df_raw_test_adi = df_raw_test_adi[
+        ['lot_transn_seq', 'slot_id', 'TEST', 'coordinate_X', 'coordinate_Y', 'MRC_RX', 'MRC_RY']
+    ]
+    df_raw_test_adi = remove_duplicated_columns(df_raw_test_adi, "df_raw_test_adi")
+
+    # PERSHOT (ADI에서만 사용)
     df_raw_pershotmrc_adi = df_rawdata_adi[df_rawdata_adi['data_kind'] == 'PERSHOT'].copy()
     df_raw_pershotmrc_adi = df_raw_pershotmrc_adi.rename(columns={
         'test_point_no': 'TEST',
         'coordinate_x': 'DieX',
         'coordinate_y': 'DieY',
-        'value_x': 'PSM_X',  
-        'value_y': 'PSM_Y'        # PERSHOT에서의 value값은  PSM Input임.   (MRC_Y 랑 헷갈리면 안됨. )
+        'value_x': 'PSM_X',
+        'value_y': 'PSM_Y'
     })
-    df_raw_pershotmrc_adi = df_raw_pershotmrc_adi[['lot_transn_seq', 'slot_id', 'TEST', 'DieX', 'DieY', 'PSM_X', 'PSM_Y']]
-    
-    print(f"✅ RAWDATA_ADI 분리 완료")
+    df_raw_pershotmrc_adi = df_raw_pershotmrc_adi[
+        ['lot_transn_seq', 'slot_id', 'TEST', 'DieX', 'DieY', 'PSM_X', 'PSM_Y']
+    ]
+    df_raw_pershotmrc_adi = remove_duplicated_columns(df_raw_pershotmrc_adi, "df_raw_pershotmrc_adi")
+
+    print("✅ RAWDATA_ADI 분리 완료")
     print(f"  - RAWDATA_ADI: {len(df_raw_rawdata_adi)} rows")
     print(f"  - TEST_ADI: {len(df_raw_test_adi)} rows")
     print(f"  - PERSHOT_ADI: {len(df_raw_pershotmrc_adi)} rows")
+
 else:
     print("⚠️ RAWDATA_ADI가 없습니다.")
     df_raw_rawdata_adi = pd.DataFrame()
@@ -45,17 +68,18 @@ else:
 
 
 if len(df_rawdata_oco) > 0:
-    # RAWDATA: TEST, DieX, DieY, X_reg, Y_reg
+    # RAWDATA
     df_raw_rawdata_oco = df_rawdata_oco[df_rawdata_oco['data_kind'] == 'RAWDATA'].copy()
     df_raw_rawdata_oco = df_raw_rawdata_oco.rename(columns={
         'test_point_no': 'TEST',
         'coordinate_x': 'DieX',
         'coordinate_y': 'DieY',
         'value_x': 'X_reg',
-        'value_y': 'Y_reg'     # Point MRC사용하는 경우에는 순수계측값이 아님.  value_y = Y_reg - MRC_RY    (즉, 순수계측값에서 Point MRC를 뺴준값이   RAWDATA에서의 Value값임.)
+        'value_y': 'Y_reg'
     })
-    
-    # TEST: coordinate_X, coordinate_Y, MRC_RX, MRC_RY
+    df_raw_rawdata_oco = remove_duplicated_columns(df_raw_rawdata_oco, "df_raw_rawdata_oco")
+
+    # TESTDATA
     df_raw_test_oco = df_rawdata_oco[df_rawdata_oco['data_kind'] == 'TESTDATA'].copy()
     df_raw_test_oco = df_raw_test_oco.rename(columns={
         'test_point_no': 'TEST',
@@ -64,115 +88,40 @@ if len(df_rawdata_oco) > 0:
         'mrc_x_valn': 'MRC_RX',
         'mrc_y_valn': 'MRC_RY'
     })
-    df_raw_test_oco = df_raw_test_oco[['lot_transn_seq', 'slot_id', 'TEST', 'coordinate_X', 'coordinate_Y', 'MRC_RX', 'MRC_RY']]
-    
-    print(f"✅ RAWDATA_OCO 분리 완료")
+    df_raw_test_oco = df_raw_test_oco[
+        ['lot_transn_seq', 'slot_id', 'TEST', 'coordinate_X', 'coordinate_Y', 'MRC_RX', 'MRC_RY']
+    ]
+    df_raw_test_oco = remove_duplicated_columns(df_raw_test_oco, "df_raw_test_oco")
+
+    print("✅ RAWDATA_OCO 분리 완료")
     print(f"  - RAWDATA_OCO: {len(df_raw_rawdata_oco)} rows")
     print(f"  - TEST_OCO: {len(df_raw_test_oco)} rows")
+
 else:
     print("⚠️ RAWDATA_OCO가 없습니다.")
     df_raw_rawdata_oco = pd.DataFrame()
     df_raw_test_oco = pd.DataFrame()
 
-
-
-
-def keep_latest_one(df, keys, time_cols, name=""):
-    if df is None or len(df) == 0:
-        return df
-    use_cols = [c for c in time_cols if c in df.columns]
-    tmp = df.copy()
-
-    if len(use_cols) > 0:
-        for c in use_cols:
-            tmp[c] = pd.to_datetime(tmp[c], errors="coerce")
-        tmp = tmp.sort_values(use_cols, ascending=True)
-        df_u = tmp.drop_duplicates(keys, keep="last")
-    else:
-        df_u = tmp.drop_duplicates(keys, keep="last")
-
-    print(f"[{name}] unique by {keys}: {len(df)} -> {len(df_u)}")
-    return df_u
-
-df_lotinfo_adi = keep_latest_one(
-    df_lotinfo_adi,
-    keys=['lot_transn_seq', 'slotid'],
-    time_cols=['impala_insert_time','timestamp','event_tsdt'],
-    name="LOTINFO"
-)
-df_lotinfo_oco = keep_latest_one(
-    df_lotinfo_oco,
-    keys=['lot_transn_seq', 'slotid'],
-    time_cols=['impala_insert_time','timestamp','event_tsdt'],
-    name="LOTINFO"
-)
-
-df_raw_test_adi = keep_latest_one(
-    df_raw_test_adi,
-    keys=['lot_transn_seq', 'slot_id', 'TEST'],
-    time_cols=['impala_insert_time','timestamp','event_tsdt'],
-    name="TEST"
-)
-df_raw_test_oco = keep_latest_one(
-    df_raw_test_oco,
-    keys=['lot_transn_seq', 'slot_id', 'TEST'],
-    time_cols=['impala_insert_time','timestamp','event_tsdt'],
-    name="TEST"
-)
-
-df_raw_pershotmrc_adi = keep_latest_one(
-    df_raw_pershotmrc_adi,
-    keys=['lot_transn_seq', 'slot_id', 'TEST', 'DieX', 'DieY'],
-    time_cols=['impala_insert_time','timestamp','event_tsdt'],
-    name="PERSHOTMRC"
-)
-
-df_expo_overlay_clean = df_expo_overlay.rename(columns={
+df_expo_overlay_u = df_expo_overlay.rename(columns={
     'lot_id': 'lotid',
     'photo_date': 'P_TIME',
 })
-df_expo_overlay_u = keep_latest_one(
-    df_expo_overlay_clean,
-    keys=['lotid', 'slot_id', 'photo_transn_seq'],
-    time_cols=['impala_insert_time','P_TIME'],
-    name="EXPO_OVERLAY_LOT"
-)
-
-if len(df_paramdata) > 0:
-    df_paramdata['slotid'] = df_paramdata['slotid'].astype(str).str.replace('.0', '', regex=False)
-df_paramdata_u = keep_latest_one(
-    df_paramdata,
-    keys=['photo_transn_seq', 'lotid', 'slotid'],
-    time_cols=['impala_insert_time','timestamp','event_tsdt'],
-    name="PARAMDATA"
-)
-
-if len(df_raw_rawdata_adi) > 0:
-    df_raw_rawdata_adi['slot_id'] = df_raw_rawdata_adi['slot_id'].astype(str).str.replace('.0', '', regex=False)
-if len(df_raw_rawdata_oco) > 0:
-    df_raw_rawdata_oco['slot_id'] = df_raw_rawdata_oco['slot_id'].astype(str).str.replace('.0', '', regex=False)
-if len(df_raw_test_adi) > 0:
-    df_raw_test_adi['slot_id'] = df_raw_test_adi['slot_id'].astype(str).str.replace('.0', '', regex=False)
-if len(df_raw_test_oco) > 0:
-    df_raw_test_oco['slot_id'] = df_raw_test_oco['slot_id'].astype(str).str.replace('.0', '', regex=False)
-if len(df_raw_pershotmrc_adi) > 0:
-    df_raw_pershotmrc_adi['slot_id'] = df_raw_pershotmrc_adi['slot_id'].astype(str).str.replace('.0', '', regex=False)
-# LOTINFO: slotid → str
-df_lotinfo_adi['slotid'] = df_lotinfo_adi['slotid'].astype(str).str.replace('.0', '', regex=False)
-df_lotinfo_oco['slotid'] = df_lotinfo_oco['slotid'].astype(str).str.replace('.0', '', regex=False)
-# EXPO: slot_id → str
-if len(df_expo_overlay_u) > 0:
-    df_expo_overlay_u['slot_id'] = df_expo_overlay_u['slot_id'].astype(str).str.replace('.0', '', regex=False)
+df_expo_overlay_u = remove_duplicated_columns(df_expo_overlay_u, "df_expo_overlay_u")
 
 
+# =========================================================
+# 5. ADI 조인
+# ADI는 PERSHOTMRC를 붙인다
+# =========================================================
 if len(df_raw_rawdata_adi) == 0:
-    print("⚠️ RAWDATA가 없어 조인을 진행할 수 없습니다.")
+    print("⚠️ RAWDATA_ADI가 없어 조인을 진행할 수 없습니다.")
     df_result_adi = pd.DataFrame()
+
 else:
     df_result_adi = df_raw_rawdata_adi.copy()
+    df_result_adi = remove_duplicated_columns(df_result_adi, "df_result_adi_init")
 
-    # 1) LOTINFO 조인
-    # left: slot_id, right: slotid (이름 다름)
+    # 1) LOTINFO
     df_result_adi = df_result_adi.merge(
         df_lotinfo_adi,
         left_on=['lot_transn_seq', 'slot_id'],
@@ -181,9 +130,10 @@ else:
         validate='m:1',
         suffixes=('', '_lotinfo')
     )
-    print(f"✅ LOTINFO 조인 완료: {len(df_result_adi)} rows")
+    df_result_adi = remove_duplicated_columns(df_result_adi, "df_result_adi_after_lotinfo")
+    print(f"✅ LOTINFO_ADI 조인 완료: {len(df_result_adi)} rows")
 
-    # 2) TEST 조인
+    # 2) TEST
     if len(df_raw_test_adi) > 0:
         df_result_adi = df_result_adi.merge(
             df_raw_test_adi,
@@ -192,9 +142,10 @@ else:
             validate='m:1',
             suffixes=('', '_test')
         )
-        print(f"✅ TEST 조인 완료: {len(df_result_adi)} rows")
+        df_result_adi = remove_duplicated_columns(df_result_adi, "df_result_adi_after_test")
+        print(f"✅ TEST_ADI 조인 완료: {len(df_result_adi)} rows")
 
-    # 3) PERSHOTMRC 조인
+    # 3) PERSHOT
     if len(df_raw_pershotmrc_adi) > 0:
         df_result_adi = df_result_adi.merge(
             df_raw_pershotmrc_adi,
@@ -203,70 +154,97 @@ else:
             validate='m:1',
             suffixes=('', '_psm')
         )
-        print(f"✅ PERSHOTMRC 조인 완료: {len(df_result_adi)} rows")
+        df_result_adi = remove_duplicated_columns(df_result_adi, "df_result_adi_after_psm")
+        print(f"✅ PERSHOTMRC_ADI 조인 완료: {len(df_result_adi)} rows")
 
-    # 4) EXPO_OVERLAY_LOT 조인
-    #    ★ photo_transn_seq를 조인 키에 추가 (rework 시 정확 매칭)
-    #    ★ apc_hist_index_no를 가져옴 (PSM 매칭 키로 사용)
+    # 4) EXPO
+    df_result_adi = remove_duplicated_columns(df_result_adi, "df_result_adi_before_expo")
     if len(df_expo_overlay_u) > 0:
-        # photo_transn_seq가 df_result에 이미 존재하는지 확인 (LOTINFO에서 옴)
         if 'photo_transn_seq' in df_result_adi.columns:
             df_result_adi = df_result_adi.merge(
-                df_expo_overlay_u[['lotid','slot_id','photo_transn_seq','P_TIME','apc_hist_index_no', 'apc_trocs_hist_index_no', 'mmo_mrc_ref_eqp_id']],
-                on=['lotid','slot_id','photo_transn_seq'],
+                df_expo_overlay_u[
+                    ['lotid', 'slot_id', 'photo_transn_seq', 'P_TIME',
+                     'apc_hist_index_no', 'apc_trocs_hist_index_no', 'mmo_mrc_ref_eqp_id']
+                ],
+                on=['lotid', 'slot_id'],
                 how='left',
                 validate='m:1'
             )
+            df_result_adi = remove_duplicated_columns(df_result_adi, "df_result_adi_after_expo")
         else:
-            # fallback: photo_transn_seq가 없으면 기존 방식
             df_result_adi = df_result_adi.merge(
-                df_expo_overlay_u[['lotid','slot_id','P_TIME','apc_hist_index_no']],
-                on=['lotid','slot_id'],
+                df_expo_overlay_u[['lotid', 'slot_id', 'P_TIME', 'apc_hist_index_no']],
+                on=['lotid', 'slot_id'],
                 how='left',
                 validate='m:1'
             )
-        print(f"✅ EXPO_OVERLAY_LOT 조인 완료: {len(df_result_adi)} rows")
-        print(f"   apc_hist_index_no 유효: {df_result_adi['apc_hist_index_no'].notna().sum()}/{len(df_result_adi)}")
+            df_result_adi = remove_duplicated_columns(df_result_adi, "df_result_adi_after_expo")
+        print(f"✅ EXPO_OVERLAY_LOT_ADI 조인 완료: {len(df_result_adi)} rows")
+        if 'apc_hist_index_no' in df_result_adi.columns:
+            print(f"   apc_hist_index_no 유효: {df_result_adi['apc_hist_index_no'].notna().sum()}/{len(df_result_adi)}")
 
-    # 5) PARAMDATA 조인 (Base_EQP1)
-    #    ★ lotid + slotid 추가하여 wafer별 정확 매칭
-    if len(df_paramdata_u) > 0 and 'photo_transn_seq' in df_result_adi.columns:
-        # slotid 타입 통일 (df_result의 slotid도 str로)
-        if 'slotid' in df_result_adi.columns:
-            df_result_adi['slotid'] = df_result_adi['slotid'].astype(str).str.replace('.0', '', regex=False)
+# 5) PARAMDATA
+if len(df_paramdata) > 0 and 'photo_transn_seq' in df_result_adi.columns:
+    if 'slotid' in df_result_adi.columns:
+        df_result_adi['slotid'] = (
+            df_result_adi['slotid']
+            .astype(str)
+            .str.replace('.0', '', regex=False)
+            .str.strip()
+        )
+
+        # PARAMDATA도 동일 타입으로 맞춤
+        df_param_adi = df_paramdata[['photo_transn_seq', 'lotid', 'slotid', 'base_eqp_id1']].copy()
+        df_param_adi = remove_duplicated_columns(df_param_adi, "df_param_adi")
+
+        df_param_adi['slotid'] = (
+            df_param_adi['slotid']
+            .astype(str)
+            .str.replace('.0', '', regex=False)
+            .str.strip()
+        )
+        df_param_adi['lotid'] = df_param_adi['lotid'].astype(str).str.strip()
+        df_param_adi['photo_transn_seq'] = df_param_adi['photo_transn_seq'].astype(str).str.strip()
+
+        if 'lotid' in df_result_adi.columns:
+            df_result_adi['lotid'] = df_result_adi['lotid'].astype(str).str.strip()
+        if 'photo_transn_seq' in df_result_adi.columns:
+            df_result_adi['photo_transn_seq'] = df_result_adi['photo_transn_seq'].astype(str).str.strip()
+
+        df_result_adi = remove_duplicated_columns(df_result_adi, "df_result_adi_before_param")
+
         df_result_adi = df_result_adi.merge(
-            df_paramdata_u[['photo_transn_seq', 'lotid', 'slotid', 'base_eqp_id1']],
+            df_param_adi,
             on=['photo_transn_seq', 'lotid', 'slotid'],
             how='left',
             validate='m:1'
         ).rename(columns={'base_eqp_id1': 'Base_EQP1'})
-        print(f"✅ PARAMDATA 조인 완료: {len(df_result_adi)} rows")
 
-    # -------------------------
-    # 4) 수치형 컬럼 일괄 변환 (Categorical/문자열 → numeric)
-    #    BDQ에서 가져온 데이터가 Categorical로 들어오는 경우 대응
-    # -------------------------
+        df_result_adi = remove_duplicated_columns(df_result_adi, "df_result_adi_after_param")
+        print(f"✅ PARAMDATA_ADI 조인 완료: {len(df_result_adi)} rows")
+
+    # 수치형 변환
     numeric_cols = ['X_reg', 'Y_reg', 'PSM_X', 'PSM_Y', 'MRC_RX', 'MRC_RY']
     for col in numeric_cols:
         if col in df_result_adi.columns:
             df_result_adi[col] = pd.to_numeric(df_result_adi[col], errors='coerce')
-    print("✅ 수치형 컬럼 일괄 변환 완료 (Categorical → numeric)")
 
-    
-    # (선택) LOTINFO에서 생긴 중복키 컬럼 정리: right_on으로 붙은 slotid 컬럼이 필요없으면 제거
-    # df_result = df_result.drop(columns=['slotid'], errors='ignore')
-
-    print(f"\n🎯 최종 조인 결과: {len(df_result_adi)} rows, {len(df_result_adi.columns)} cols")
+    print(f"🎯 최종 ADI 조인 결과: {len(df_result_adi)} rows, {len(df_result_adi.columns)} cols")
 
 
+# =========================================================
+# 6. OCO 조인
+# OCO에는 PSM을 붙이지 않는다
+# =========================================================
 if len(df_raw_rawdata_oco) == 0:
-    print("⚠️ RAWDATA가 없어 조인을 진행할 수 없습니다.")
+    print("⚠️ RAWDATA_OCO가 없어 조인을 진행할 수 없습니다.")
     df_result_oco = pd.DataFrame()
+
 else:
     df_result_oco = df_raw_rawdata_oco.copy()
+    df_result_oco = remove_duplicated_columns(df_result_oco, "df_result_oco_init")
 
-    # 1) LOTINFO 조인
-    # left: slot_id, right: slotid (이름 다름)
+    # 1) LOTINFO
     df_result_oco = df_result_oco.merge(
         df_lotinfo_oco,
         left_on=['lot_transn_seq', 'slot_id'],
@@ -275,9 +253,10 @@ else:
         validate='m:1',
         suffixes=('', '_lotinfo')
     )
-    print(f"✅ LOTINFO 조인 완료: {len(df_result_oco)} rows")
+    df_result_oco = remove_duplicated_columns(df_result_oco, "df_result_oco_after_lotinfo")
+    print(f"✅ LOTINFO_OCO 조인 완료: {len(df_result_oco)} rows")
 
-    # 2) TEST 조인
+    # 2) TEST
     if len(df_raw_test_oco) > 0:
         df_result_oco = df_result_oco.merge(
             df_raw_test_oco,
@@ -286,76 +265,87 @@ else:
             validate='m:1',
             suffixes=('', '_test')
         )
-        print(f"✅ TEST 조인 완료: {len(df_result_oco)} rows")
+        df_result_oco = remove_duplicated_columns(df_result_oco, "df_result_oco_after_test")
+        print(f"✅ TEST_OCO 조인 완료: {len(df_result_oco)} rows")
 
-    # 3) PERSHOTMRC 조인
-    if len(df_raw_pershotmrc_adi) > 0:
-        df_result_oco = df_result_oco.merge(
-            df_raw_pershotmrc_adi,
-            on=['lot_transn_seq', 'slot_id', 'TEST', 'DieX', 'DieY'],
-            how='left',
-            validate='m:1',
-            suffixes=('', '_psm')
-        )
-        print(f"✅ PERSHOTMRC 조인 완료: {len(df_result_oco)} rows")
-
-    # 4) EXPO_OVERLAY_LOT 조인
-    #    ★ photo_transn_seq를 조인 키에 추가 (rework 시 정확 매칭)
-    #    ★ apc_hist_index_no를 가져옴 (PSM 매칭 키로 사용)
+    # 3) EXPO
+    df_result_oco = remove_duplicated_columns(df_result_oco, "df_result_oco_before_expo")
     if len(df_expo_overlay_u) > 0:
-        # photo_transn_seq가 df_result에 이미 존재하는지 확인 (LOTINFO에서 옴)
         if 'photo_transn_seq' in df_result_oco.columns:
             df_result_oco = df_result_oco.merge(
-                df_expo_overlay_u[['lotid','slot_id','photo_transn_seq','P_TIME','apc_hist_index_no', 'apc_trocs_hist_index_no', 'mmo_mrc_ref_eqp_id']],
-                on=['lotid','slot_id','photo_transn_seq'],
+                df_expo_overlay_u[
+                    ['lotid', 'slot_id', 'photo_transn_seq', 'P_TIME',
+                     'apc_hist_index_no', 'apc_trocs_hist_index_no', 'mmo_mrc_ref_eqp_id']
+                ],
+                on=['lotid', 'slot_id'],
                 how='left',
                 validate='m:1'
             )
+            df_result_oco = remove_duplicated_columns(df_result_oco, "df_result_oco_after_expo")
         else:
-            # fallback: photo_transn_seq가 없으면 기존 방식
             df_result_oco = df_result_oco.merge(
-                df_expo_overlay_u[['lotid','slot_id','P_TIME','apc_hist_index_no']],
-                on=['lotid','slot_id'],
+                df_expo_overlay_u[['lotid', 'slot_id', 'P_TIME', 'apc_hist_index_no']],
+                on=['lotid', 'slot_id'],
                 how='left',
                 validate='m:1'
             )
-        print(f"✅ EXPO_OVERLAY_LOT 조인 완료: {len(df_result_oco)} rows")
-        print(f"   apc_hist_index_no 유효: {df_result_oco['apc_hist_index_no'].notna().sum()}/{len(df_result_oco)}")
+            df_result_oco = remove_duplicated_columns(df_result_oco, "df_result_oco_after_expo")
+        print(f"✅ EXPO_OVERLAY_LOT_OCO 조인 완료: {len(df_result_oco)} rows")
+        if 'apc_hist_index_no' in df_result_oco.columns:
+            print(f"   apc_hist_index_no 유효: {df_result_oco['apc_hist_index_no'].notna().sum()}/{len(df_result_oco)}")
 
-    # 5) PARAMDATA 조인 (Base_EQP1)
-    #    ★ lotid + slotid 추가하여 wafer별 정확 매칭
-    if len(df_paramdata_u) > 0 and 'photo_transn_seq' in df_result_oco.columns:
-        # slotid 타입 통일 (df_result의 slotid도 str로)
+    # 4) PARAMDATA
+    if len(df_paramdata) > 0 and 'photo_transn_seq' in df_result_oco.columns:
         if 'slotid' in df_result_oco.columns:
-            df_result_oco['slotid'] = df_result_oco['slotid'].astype(str).str.replace('.0', '', regex=False)
+            df_result_oco['slotid'] = (
+                df_result_oco['slotid']
+                .astype(str)
+                .str.replace('.0', '', regex=False)
+                .str.strip()
+            )
+
+        # PARAMDATA도 동일 타입으로 맞춤
+        df_param_oco = df_paramdata[['photo_transn_seq', 'lotid', 'slotid', 'base_eqp_id1']].copy()
+        df_param_oco = remove_duplicated_columns(df_param_oco, "df_param_oco")
+
+        df_param_oco['slotid'] = (
+            df_param_oco['slotid']
+            .astype(str)
+            .str.replace('.0', '', regex=False)
+            .str.strip()
+        )
+        df_param_oco['lotid'] = df_param_oco['lotid'].astype(str).str.strip()
+        df_param_oco['photo_transn_seq'] = df_param_oco['photo_transn_seq'].astype(str).str.strip()
+
+        if 'lotid' in df_result_oco.columns:
+            df_result_oco['lotid'] = df_result_oco['lotid'].astype(str).str.strip()
+        if 'photo_transn_seq' in df_result_oco.columns:
+            df_result_oco['photo_transn_seq'] = df_result_oco['photo_transn_seq'].astype(str).str.strip()
+
+        df_result_oco = remove_duplicated_columns(df_result_oco, "df_result_oco_before_param")
+
         df_result_oco = df_result_oco.merge(
-            df_paramdata_u[['photo_transn_seq', 'lotid', 'slotid', 'base_eqp_id1']],
+            df_param_oco,
             on=['photo_transn_seq', 'lotid', 'slotid'],
             how='left',
             validate='m:1'
         ).rename(columns={'base_eqp_id1': 'Base_EQP1'})
-        print(f"✅ PARAMDATA 조인 완료: {len(df_result_oco)} rows")
 
-    # -------------------------
-    # 4) 수치형 컬럼 일괄 변환 (Categorical/문자열 → numeric)
-    #    BDQ에서 가져온 데이터가 Categorical로 들어오는 경우 대응
-    # -------------------------
-    numeric_cols = ['X_reg', 'Y_reg', 'PSM_X', 'PSM_Y', 'MRC_RX', 'MRC_RY']
+        df_result_oco = remove_duplicated_columns(df_result_oco, "df_result_oco_after_param")
+        print(f"✅ PARAMDATA_OCO 조인 완료: {len(df_result_oco)} rows")
+    # 수치형 변환
+    numeric_cols = ['X_reg', 'Y_reg', 'MRC_RX', 'MRC_RY']
     for col in numeric_cols:
         if col in df_result_oco.columns:
             df_result_oco[col] = pd.to_numeric(df_result_oco[col], errors='coerce')
-    print("✅ 수치형 컬럼 일괄 변환 완료 (Categorical → numeric)")
 
-    
-    # (선택) LOTINFO에서 생긴 중복키 컬럼 정리: right_on으로 붙은 slotid 컬럼이 필요없으면 제거
-    # df_result = df_result.drop(columns=['slotid'], errors='ignore')
-
-    print(f"\n🎯 최종 조인 결과: {len(df_result_oco)} rows, {len(df_result_oco.columns)} cols")
+    print(f"🎯 최종 OCO 조인 결과: {len(df_result_oco)} rows, {len(df_result_oco.columns)} cols")
 
 
-
+# =========================================================
+# 7. 컬럼명 정리
+# =========================================================
 if len(df_result_adi) > 0:
-    # 컬럼명 정리
     df_result_adi = df_result_adi.rename(columns={
         'pstepseq': 'STEPSEQ',
         'lotid': 'LOT_ID',
@@ -375,15 +365,14 @@ if len(df_result_adi) > 0:
         'chip_y_qty': 'CHIP_Y_NUM',
         'mmo_mrc_ref_eqp_id': 'MMO_MRC_EQP',
         'mstepseq': 'M_STEPSEQ',
-        'timestamp' : 'M_TIME'
+        'timestamp': 'M_TIME'
     })
-    
-    print("✅ 컬럼명 정리 완료")
+    df_result_adi = remove_duplicated_columns(df_result_adi, "df_result_adi_after_rename")
+    print("✅ ADI 컬럼명 정리 완료")
 else:
-    print("⚠️ 결과 데이터가 없습니다.")
+    print("⚠️ ADI 결과 데이터가 없습니다.")
 
 if len(df_result_oco) > 0:
-    # 컬럼명 정리
     df_result_oco = df_result_oco.rename(columns={
         'pstepseq': 'STEPSEQ',
         'lotid': 'LOT_ID',
@@ -403,20 +392,27 @@ if len(df_result_oco) > 0:
         'chip_y_qty': 'CHIP_Y_NUM',
         'mmo_mrc_ref_eqp_id': 'MMO_MRC_EQP',
         'mstepseq': 'M_STEPSEQ',
-        'timestamp' : 'M_TIME'
+        'timestamp': 'M_TIME'
     })
-    
-    print("✅ 컬럼명 정리 완료")
+    df_result_oco = remove_duplicated_columns(df_result_oco, "df_result_oco_after_rename")
+    print("✅ OCO 컬럼명 정리 완료")
 else:
-    print("⚠️ 결과 데이터가 없습니다.")
+    print("⚠️ OCO 결과 데이터가 없습니다.")
 
-df_result_adi[0:10000].to_excel('df_result_adi_10000.xlsx')
-df_result_oco[0:10000].to_excel('df_result_oco_10000.xlsx')
+df_result_adi = df_result_adi.drop('psm_mmo_ref_eqp_id', axis=1)
+df_result_oco = df_result_oco.drop('psm_mmo_ref_eqp_id', axis=1)
+df_result_adi = df_result_adi.rename(columns={'photo_transn_seq_x': 'photo_transn_seq'})
+df_result_adi = df_result_adi.drop(columns=['photo_transn_seq_y'])
+df_result_oco = df_result_oco.rename(columns={'photo_transn_seq_x': 'photo_transn_seq'})
+df_result_oco = df_result_oco.drop(columns=['photo_transn_seq_y'])
+# =========================================================
+# 8. 저장
+# =========================================================
+df_result_adi.to_excel('df_result_adi.xlsx')
+df_result_oco.to_excel('df_result_oco.xlsx')
 
-
-
-df_raw_rawdata_adi.to_excel('point_ADI_RAW.xlsx')
-df_raw_test_adi.to_excel('point_ADI_test.xlsx')
-df_raw_pershotmrc_adi.to_excel('point_ADI_PSM_input.xlsx')
-df_raw_rawdata_oco.to_excel('point_OCO_RAW.xlsx')
-df_raw_test_oco.to_excel('point_OCO_test.xlsx')
+#df_raw_rawdata_adi.to_excel('point_ADI_RAW.xlsx')
+#df_raw_test_adi.to_excel('point_ADI_test.xlsx')
+#df_raw_pershotmrc_adi.to_excel('point_ADI_PSM_input.xlsx')
+#df_raw_rawdata_oco.to_excel('point_OCO_RAW.xlsx')
+#df_raw_test_oco.to_excel('point_OCO_test.xlsx')
