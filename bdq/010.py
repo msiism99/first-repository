@@ -178,11 +178,6 @@ required_dy_cols = [kpara_to_col[k] for k in coeff_keys_dy]
 
 
 
-
-
-
-
-
 if len(df_kmrc_adi) == 0 or len(df_final_adi) == 0:
     print("⚠️ KMRC 또는 df_final_adi 데이터가 없어 Decorrection을 건너뜁니다.")
 else:
@@ -258,6 +253,11 @@ else:
             
             success_count += 1
         
+        num_cols = ['X_reg', 'Y_reg', 'mrc_fit_x', 'mrc_fit_y', 'PSM_X', 'PSM_Y']
+        for col in num_cols:
+            if col in df_final_adi.columns:
+                df_final_adi[col] = pd.to_numeric(df_final_adi[col], errors='coerce')
+                
         # 6. df_final_adi에 컬럼 추가
         df_final_adi['mrc_fit_x'] = mrc_fit_x
         df_final_adi['mrc_fit_y'] = mrc_fit_y
