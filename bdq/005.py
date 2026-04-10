@@ -36,20 +36,36 @@ else:
       
      
     FROM ees_ds_eai.apc_expo_overlay_lot e
-    WHERE e.impala_insert_time >= now() - interval {expo_days} days
+    WHERE e.impala_insert_time >= now() - interval {expo_days+5} days
       AND e.db_user = '{db_user}'
       AND e.lot_id IN ('{lotid_str}')
       {pstepseq_filter}
       -- AND e.metro_step_seq = 'VC077251'  # OCO는 안떠서 제외함
 
-      
     LIMIT 100000
     """
     
     print("EXPO_OVERLAY_LOT 데이터 조회 시작...")
     df_expo_overlay = bdq.getData(sql_expo_overlay)
+    df_expo_overlay = (
+        df_expo_overlay
+        .sort_values('photo_date')
+        .drop_duplicates(['lot_id', 'slot_id'], keep='last')
+        .reset_index(drop=True)
+    )
+    df_expo_overlay['slot_id'] = df_expo_overlay['slot_id'].astype(int)
+    df_lotinfo_adi['slotid'] = df_lotinfo_adi['slotid'].astype(int)
+    df_expo_overlay = df_expo_overlay.merge(
+        df_lotinfo_adi[['lotid', 'slotid']].drop_duplicates(),
+        left_on=['lot_id', 'slot_id'],   # df_rawdata_adi 기준 컬럼
+        right_on=['lotid', 'slotid'],   # df_lotinfo_adi 기준 컬럼
+        how='inner'
+    ).reset_index(drop=True)
+
     print(f"✅ EXPO_OVERLAY_LOT rows: {len(df_expo_overlay)}")
     print(df_expo_overlay.head())
+
+df_expo_overlay = df_expo_overlay.sort_values(by=['photo_transn_seq', 'slotid'], ascending=[True, True]).reset_index(drop=True)
 
 df_expo_overlay.to_excel('EXPO_OVERLAY_LOT.xlsx')
   
