@@ -5,7 +5,9 @@ df_result_oco['GROUP'] = pd.cut(df_result_oco['TEST'], bins=[0, 80, 160, 240], l
 
 if target_mstepseq_oco[3:6] == '077':
     df_result_oco = df_result_oco[df_result_oco['GROUP'] == 'E2']
-print(df_result_oco)
+else:
+    df_result_oco = df_result_oco[df_result_oco['GROUP'] == 'E1']
+
 # 4.3 좌표계
 
 if len(df_result_adi) > 0:
@@ -344,8 +346,8 @@ else:
 
 # 5.3 CSV 파일로 저장
 
-df_final_adi[0:10000].to_excel('df_final_adi_10000.xlsx')
+df_final_adi.to_excel('df_final_adi.xlsx')
 print(f"   - 총 {len(df_final_adi)} rows, {len(df_final_adi.columns)} columns")
-df_final_oco[0:10000].to_excel('df_final_oco_10000.xlsx')
+df_final_oco.to_excel('df_final_oco.xlsx')
 print(f"   - 총 {len(df_final_oco)} rows, {len(df_final_oco.columns)} columns")
 
