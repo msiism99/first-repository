@@ -204,9 +204,7 @@ if len(df_psm_input) > 0 and len(df_final_oco) > 0:
 else:
     print("데이터가 없어 매칭 키를 생성할 수 없습니다.")
 
-df_psm_input.to_excel('df_psm_input_13.xlsx')
-df_final_adi.to_excel('df_final_adi_13.xlsx')
-df_final_oco.to_excel('df_final_oco_13.xlsx')
+
 
 # PSM Fitting 실행
 df_final_adi = shot_fitting(df_final_adi, df_psm_input, k_col_prefix="mrc_k", result_prefix="psm_fit")
