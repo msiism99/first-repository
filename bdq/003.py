@@ -77,49 +77,24 @@ LIMIT 100000
 
 df_lotinfo_adi = bdq.getData(sql_lotinfo_adi)
 
-
-oco_keys = (
-    df_lotinfo_oco[['photo_transn_seq', 'slotid']]
-    .dropna()
-    .drop_duplicates()
-    .copy()
-)
-
-adi_keys = (
-    df_lotinfo_adi[['photo_transn_seq', 'slotid']]
-    .dropna()
-    .drop_duplicates()
-    .copy()
-)
+oco_keys = (df_lotinfo_oco[['photo_transn_seq', 'slotid']].dropna().drop_duplicates().copy())
+adi_keys = (df_lotinfo_adi[['photo_transn_seq', 'slotid']].dropna().drop_duplicates().copy())
 
 # 공통 key만 추출
-common_keys = oco_keys.merge(
-    adi_keys,
-    on=['photo_transn_seq', 'slotid'],
-    how='inner'
-)
+common_keys = oco_keys.merge(adi_keys, on=['photo_transn_seq', 'slotid'], how='inner')
+df_lotinfo_oco = df_lotinfo_oco.merge(common_keys, on=['photo_transn_seq', 'slotid'], how='inner')
+df_lotinfo_adi = df_lotinfo_adi.merge(common_keys, on=['photo_transn_seq', 'slotid'], how='inner')
 
-# OCO도 공통 key만 남김
-df_lotinfo_oco = df_lotinfo_oco.merge(
-    common_keys,
-    on=['photo_transn_seq', 'slotid'],
-    how='inner'
-)
+df_lotinfo_oco = df_lotinfo_oco.sort_values(by=['photo_transn_seq', 'slotid'], ascending=[True, True]).reset_index(drop=True)
+df_lotinfo_adi = df_lotinfo_adi.sort_values(by=['photo_transn_seq', 'slotid'], ascending=[True, True]).reset_index(drop=True)
 
-# ADI도 공통 key만 남김
-df_lotinfo_adi = df_lotinfo_adi.merge(
-    common_keys,
-    on=['photo_transn_seq', 'slotid'],
-    how='inner'
-)
-
+df_lotinfo_oco['slotid'] = df_lotinfo_oco['slotid'].astype(int)
+df_lotinfo_adi['slotid'] = df_lotinfo_adi['slotid'].astype(int)
 
 print(f"✅ ADI LOTINFO rows: {len(df_lotinfo_adi)}")
 print(f"Columns: {list(df_lotinfo_adi.columns)}")
-print(df_lotinfo_adi.head())
 df_lotinfo_adi.to_excel('NAUTIL_DAT_LOTINFO_ADI.xlsx', index=False)
 
 print(f"✅ OCO LOTINFO rows: {len(df_lotinfo_oco)}")
 print(f"Columns: {list(df_lotinfo_oco.columns)}")
-print(df_lotinfo_oco.head())
 df_lotinfo_oco.to_excel('NAUTIL_DAT_LOTINFO_OCO.xlsx', index=False)
