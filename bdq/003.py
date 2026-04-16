@@ -42,7 +42,7 @@ LIMIT 1000
 
 df_lotinfo_oco = bdq.getData(sql_lotinfo_oco)
 photo_transn_seqs = df_lotinfo_oco['photo_transn_seq'].unique().tolist()
-photo_transn_seq_str = ",".join([str(x) for x in photo_transn_seqs[:1000]])
+photo_transn_seq_str = ",".join([str(int(x)) for x in photo_transn_seqs[:1000] if pd.notna(x)])
 
 sql_lotinfo_adi = f"""
 WITH lotinfo_raw AS (
@@ -74,7 +74,7 @@ SELECT *
 FROM lotinfo_raw
 LIMIT 100000
 """
-
+print(photo_transn_seq_str)
 df_lotinfo_adi = bdq.getData(sql_lotinfo_adi)
 
 oco_keys = (df_lotinfo_oco[['photo_transn_seq', 'slotid']].dropna().drop_duplicates().copy())
