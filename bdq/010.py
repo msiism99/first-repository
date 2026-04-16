@@ -42,6 +42,11 @@ else:
         # (photo_transn_seq, lotid, slotid)별 중복 제거 (최신 1건 유지)
         df_kmrc_adi = df_kmrc_adi.sort_values('impala_insert_time', ascending=True)
         df_kmrc_adi = df_kmrc_adi.drop_duplicates(subset=['photo_transn_seq', 'lotid', 'slotid'], keep='last')
+        
+        df_kmrc_adi['slotid'] = pd.to_numeric(df_kmrc_adi['slotid'], errors='coerce').astype('Int64')
+        df_kmrc_adi['photo_transn_seq'] = pd.to_numeric(df_kmrc_adi['photo_transn_seq'], errors='coerce').astype('Int64')
+
+
         print(f"   중복 제거 후: {len(df_kmrc_adi)} rows (unique photo_transn_seq + lotid + slotid)")
         
         # df_final과의 매칭률 확인 (LOT_ID↔lotid, Wafer↔slotid)
@@ -98,6 +103,8 @@ else:
         # (photo_transn_seq, lotid, slotid)별 중복 제거 (최신 1건 유지)
         df_kmrc_oco = df_kmrc_oco.sort_values('impala_insert_time', ascending=True)
         df_kmrc_oco = df_kmrc_oco.drop_duplicates(subset=['photo_transn_seq', 'lotid', 'slotid'], keep='last')
+        df_kmrc_oco['slotid'] = pd.to_numeric(df_kmrc_oco['slotid'], errors='coerce').astype('Int64')
+        df_kmrc_oco['photo_transn_seq'] = pd.to_numeric(df_kmrc_oco['photo_transn_seq'], errors='coerce').astype('Int64')
         print(f"   중복 제거 후: {len(df_kmrc_oco)} rows (unique photo_transn_seq + lotid + slotid)")
         
         # df_final과의 매칭률 확인 (LOT_ID↔lotid, Wafer↔slotid)
