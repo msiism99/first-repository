@@ -3,8 +3,8 @@ import pandas as pd
 import bigdataquery as bdq
 from datetime import datetime
 
-days = 3
-exclude_recent_days = 2
+days = 2
+exclude_recent_days = 1
 expo_days = 4
 
 target_lotid = None   
