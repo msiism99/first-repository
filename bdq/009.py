@@ -3,7 +3,7 @@
 df_result_adi['GROUP'] = pd.cut(df_result_adi['TEST'], bins=[0, 80, 160, 240], labels=['E1', 'E2', 'E3'])
 df_result_oco['GROUP'] = pd.cut(df_result_oco['TEST'], bins=[0, 80, 160, 240], labels=['E1', 'E2', 'E3'])
 
-if target_mstepseq_oco[3:6] == '077':
+if target_mstepseq_oco[2:5] == '077':
     df_result_oco = df_result_oco[df_result_oco['GROUP'] == 'E2']
 else:
     df_result_oco = df_result_oco[df_result_oco['GROUP'] == 'E1']
