@@ -14,14 +14,19 @@ Flow
 3) ADI/OCO history raw_y와 current raw_y에서 위 MRC 성분을 제거한다.
 4) MRC 제거 후 residual에서 TEST fingerprint를 제거해 real_residual을 만든다.
 5) M1 PSM = OCO real_residual CPE33 fit의 NEG 방향.
-6) M2 PSM = OCO real_residual - ADI real_residual CPE33 fit의 NEG 방향.
+6) M2 PSM = OCO real residual CPE33 model - ADI real residual CPE33 model의 NEG 방향.
+
+주의
+----
+M2는 OCO/ADI point_key를 inner merge하지 않는다.
+OCO와 ADI의 측정 point가 완전히 일치하지 않아도 shot별 CPE model을 각각 fit한 뒤 beta 차이로 skew model을 만든다.
 
 해석
 ----
 - new_mrc_y_common_neg = -(OCO_raw_company_fit - ADI_raw_company_fit)
 - y_after_new_mrc = raw_y + new_mrc_y_common_neg
 - M1: y_sim = y_after_new_mrc - fit(OCO_real_residual)
-- M2: y_sim = y_after_new_mrc - fit(OCO_real_residual - ADI_real_residual)
+- M2: y_sim = y_after_new_mrc - [fit(OCO_real_residual) - fit(ADI_real_residual)]
 """
 
 from __future__ import annotations
@@ -179,52 +184,78 @@ def add_real_residual_by_test_fpt(df: pd.DataFrame, source_name: str) -> Tuple[p
     return out, fpt
 
 
-def make_m2_skew_avg_df(avg_oco_real: pd.DataFrame, avg_adi_real: pd.DataFrame) -> pd.DataFrame:
-    """OCO real residual - ADI real residual point map 생성."""
-    if len(avg_oco_real) == 0 or len(avg_adi_real) == 0:
-        return pd.DataFrame()
+def build_m2_model_from_model_difference(model_oco: Dict, meta_oco: Dict, model_adi: Dict, meta_adi: Dict):
+    """OCO/ADI point merge 대신, 같은 shot_key의 CPE beta 차이로 M2 skew model 생성."""
+    model_m2 = {}
+    meta_m2 = {}
 
-    keep_cols = [
-        "_shot_key", "_point_key",
-        "fcp_x", "fcp_y", "coordinate_X", "coordinate_Y", "target_y", "n_hist_point",
-        "TEST", "STEP_PITCH_X", "STEP_PITCH_Y", "CHIP_X_NUM", "CHIP_Y_NUM",
-    ]
-    o_cols = [c for c in keep_cols if c in avg_oco_real.columns]
-    a_cols = [c for c in keep_cols if c in avg_adi_real.columns]
+    common_shots = sorted(set(model_oco.keys()) & set(model_adi.keys()))
 
-    m = avg_oco_real[o_cols].merge(
-        avg_adi_real[a_cols],
-        on=["_shot_key", "_point_key"],
-        how="inner",
-        suffixes=("_oco", "_adi"),
-    )
+    for shot_key in common_shots:
+        beta_oco = np.asarray(model_oco[shot_key]["beta"], dtype=float)
+        beta_adi = np.asarray(model_adi[shot_key]["beta"], dtype=float)
+        beta_skew = beta_oco - beta_adi
 
-    if len(m) == 0:
-        return pd.DataFrame()
+        model_m2[shot_key] = {
+            "method": f"model_diff:{model_oco[shot_key].get('method')}/{model_adi[shot_key].get('method')}",
+            "beta": beta_skew,
+            "lambdas": np.nanmax(np.vstack([
+                np.asarray(model_oco[shot_key].get("lambdas", np.full_like(beta_skew, np.nan)), dtype=float),
+                np.asarray(model_adi[shot_key].get("lambdas", np.full_like(beta_skew, np.nan)), dtype=float),
+            ]), axis=0),
+            "base_lambda": np.nanmax([
+                model_oco[shot_key].get("base_lambda", np.nan),
+                model_adi[shot_key].get("base_lambda", np.nan),
+            ]),
+            "lambda_max": np.nanmax([
+                model_oco[shot_key].get("lambda_max", np.nan),
+                model_adi[shot_key].get("lambda_max", np.nan),
+            ]),
+            "gopt": np.nanmax([
+                model_oco[shot_key].get("gopt", np.nan),
+                model_adi[shot_key].get("gopt", np.nan),
+            ]),
+            "n_points": min(
+                model_oco[shot_key].get("n_points", 0),
+                model_adi[shot_key].get("n_points", 0),
+            ),
+            "n_virtual": np.nanmax([
+                model_oco[shot_key].get("n_virtual", np.nan),
+                model_adi[shot_key].get("n_virtual", np.nan),
+            ]),
+            "inner_or_partial": "model_diff",
+            "span_violation_count": np.nanmax([
+                model_oco[shot_key].get("span_violation_count", np.nan),
+                model_adi[shot_key].get("span_violation_count", np.nan),
+            ]),
+        }
 
-    out = pd.DataFrame()
-    out["_shot_key"] = m["_shot_key"]
-    out["_point_key"] = m["_point_key"]
+        mo = meta_oco.get(shot_key, {})
+        ma = meta_adi.get(shot_key, {})
+        meta_m2[shot_key] = {
+            "status": "ok",
+            "n_points": min(mo.get("n_points", 0), ma.get("n_points", 0)),
+            "n_terms": len(base.CPE33_KEYS_DY),
+            "rank": min(mo.get("rank", np.nan), ma.get("rank", np.nan)),
+            "cond": np.nanmax([mo.get("cond", np.nan), ma.get("cond", np.nan)]),
+            "target_m3s": np.nan,
+            "fit_m3s": np.nan,
+            "fit_over_target": np.nan,
+            "gopt": model_m2[shot_key]["gopt"],
+            "base_lambda": model_m2[shot_key]["base_lambda"],
+            "lambda_max": model_m2[shot_key]["lambda_max"],
+            "gopt_iter": np.nan,
+            "span_iter": np.nan,
+            "span_violation_count": model_m2[shot_key]["span_violation_count"],
+            "method": model_m2[shot_key]["method"],
+            "inner_or_partial": "model_diff",
+            "n_virtual": model_m2[shot_key]["n_virtual"],
+            "n_virtual_full": np.nan,
+            "virtual_source": "model_difference_no_point_merge",
+            "base_lambda_scale": np.nan,
+        }
 
-    for c in ["fcp_x", "fcp_y", "coordinate_X", "coordinate_Y", "TEST", "STEP_PITCH_X", "STEP_PITCH_Y", "CHIP_X_NUM", "CHIP_Y_NUM"]:
-        c_oco = f"{c}_oco"
-        c_adi = f"{c}_adi"
-        if c_oco in m.columns:
-            out[c] = m[c_oco]
-        elif c_adi in m.columns:
-            out[c] = m[c_adi]
-
-    out["target_y"] = _numeric(m["target_y_oco"]) - _numeric(m["target_y_adi"])
-
-    if "n_hist_point_oco" in m.columns and "n_hist_point_adi" in m.columns:
-        out["n_hist_point_oco"] = m["n_hist_point_oco"]
-        out["n_hist_point_adi"] = m["n_hist_point_adi"]
-        out["n_hist_point"] = np.minimum(
-            _numeric(m["n_hist_point_oco"]),
-            _numeric(m["n_hist_point_adi"]),
-        )
-
-    return out
+    return model_m2, meta_m2
 
 
 def _coef_row(current_lot, current_wafer, seq_idx, shot_key, model, method: str) -> Dict:
@@ -302,15 +333,19 @@ def simulate_current_wafer(
 
     avg_oco_real = base.average_history_by_point(hist_oco_real, REAL_RESIDUAL_COL)
     avg_adi_real = base.average_history_by_point(hist_adi_real, REAL_RESIDUAL_COL)
-    avg_m2_skew = make_m2_skew_avg_df(avg_oco_real, avg_adi_real)
 
     # -----------------------------------------------------
     # 5) M1: OCO real_residual로 CPE33 PSM 추출
-    # 6) M2: OCO real_residual - ADI real_residual로 CPE33 PSM 추출
+    # 6) M2: OCO real residual model - ADI real residual model로 CPE33 PSM 추출
     # -----------------------------------------------------
     model_m1, meta_m1 = base.fit_history_model_by_shot(avg_oco_real)
     model_adi_diag, meta_adi_diag = base.fit_history_model_by_shot(avg_adi_real)
-    model_m2, meta_m2 = base.fit_history_model_by_shot(avg_m2_skew)
+    model_m2, meta_m2 = build_m2_model_from_model_difference(
+        model_m1,
+        meta_m1,
+        model_adi_diag,
+        meta_adi_diag,
+    )
 
     # -----------------------------------------------------
     # 현재 wafer simulation base 구성
@@ -323,7 +358,7 @@ def simulate_current_wafer(
 
     cur["fit_oco_y"] = np.nan              # M1 OCO real residual fit
     cur["fit_adi_y"] = np.nan              # diagnostic ADI real residual fit
-    cur["fit_skew_y"] = np.nan             # M2 real skew fit
+    cur["fit_skew_y"] = np.nan             # M2 model difference fit
 
     cur["new_psm_y_m1_neg"] = np.nan
     cur["new_psm_y_m2_neg"] = np.nan
@@ -488,7 +523,7 @@ def simulate_current_wafer(
         "old_psm_col": base.OLD_PSM_COL,
         "mrc_strategy": "common_mrc_delta_from_OCO_raw_company_fit_minus_ADI_raw_company_fit",
         "psm_m1_strategy": "CPE33_fit_OCO_real_residual_NEG",
-        "psm_m2_strategy": "CPE33_fit_OCO_real_residual_minus_ADI_real_residual_NEG",
+        "psm_m2_strategy": "CPE33_beta_difference_OCO_real_minus_ADI_real_NEG_no_point_merge",
 
         "remove_test_fpt_before_cpe": base.REMOVE_TEST_FPT_BEFORE_CPE,
         "test_fpt_mode": base.TEST_FPT_MODE,
@@ -500,12 +535,13 @@ def simulate_current_wafer(
         "adi_test_fpt_abs_median": float(np.nanmedian(np.abs(fpt_adi["test_fpt_y"]))) if len(fpt_adi) else np.nan,
 
         "normal_shot_min_points": base.NORMAL_SHOT_MIN_POINTS,
-        "normal_compare_mask": "is_normal_shot_m2 = M2_real_skew_normal_shots",
+        "normal_compare_mask": "is_normal_shot_m2 = M2_common_shot_model_difference_normal_shots",
 
         "n_rows_current": len(cur),
         "n_shot_total": n_shot_total,
         "n_shot_m1_success": n_shot_m1,
         "n_shot_m2_success": n_shot_m2,
+        "n_m2_common_model_shots": len(model_m2),
         "n_normal_shot_m1": n_normal_shot_m1,
         "n_normal_shot_m2": n_normal_shot_m2,
 
@@ -615,7 +651,7 @@ def simulate_current_wafer(
     meta_rows = []
     meta_rows.extend(base.make_meta_df(meta_m1, current_lot, current_wafer, seq_idx, source="M1_OCO_REAL_RESIDUAL"))
     meta_rows.extend(base.make_meta_df(meta_adi_diag, current_lot, current_wafer, seq_idx, source="ADI_REAL_RESIDUAL_DIAG"))
-    meta_rows.extend(base.make_meta_df(meta_m2, current_lot, current_wafer, seq_idx, source="M2_OCO_MINUS_ADI_REAL_RESIDUAL"))
+    meta_rows.extend(base.make_meta_df(meta_m2, current_lot, current_wafer, seq_idx, source="M2_MODEL_DIFF_OCO_MINUS_ADI_REAL"))
 
     # MRC company fit meta도 fit_meta sheet에 같이 남긴다.
     for source, meta in [("MRC_OCO_RAW_COMPANY", meta_oco_mrc), ("MRC_ADI_RAW_COMPANY", meta_adi_mrc)]:
