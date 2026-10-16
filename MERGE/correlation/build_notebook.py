@@ -38,6 +38,8 @@ md(r'''
 # ADI/OCO wafer별 상관 분석
 이 파일을 **`C:\PHOTO_ANALYSIS\BASIC\ADI_OCO_Correlation.ipynb`**에 놓고 위에서 아래로 실행합니다. DB 조회 없이 기존 `output_decorrect_notebook\stages`의 Parquet/전체 Excel을 읽습니다. 결과는 새 `output_adi_oco_correlation` 폴더에 저장합니다.
 
+**확정한 데이터 기준은 ADI=`raw_x/raw_y`, OCO=`X_reg/Y_reg`입니다.** 현재 실제 오차 기준의 분석과 OCO 시뮬레이션은 **14~19번**이며 `output_oco_adi_raw_optimized`에 따로 저장합니다. 기본 분석 방향은 X입니다. 00~13번의 Reg 비교는 계측 출력에 대한 참고 결과이고, 06~09번은 기존 ΔK 방식의 ADI 시뮬레이션으로 별도 보존합니다.
+
 1. **Reg ↔ Reg:** 같은 wafer의 X/Y mean, 3σ를 비교합니다.
 2. **ADI ideal 보정 simulation ↔ OCO real_residual:** 기적용 K−ideal K → ADI point별 보정 차이 → 기존 Reg−보정 차이 순서로 계산합니다.
 3. **Reg에서 추출한 WK/RK ↔ WK/RK:** ADI/OCO Reg에서 각각 wafer 회귀를 새로 수행하고 공통 ADI 좌표에서 term 기여량을 nm로 환산합니다.
@@ -81,6 +83,7 @@ PREVIEW_ROWS = 8
 SHOW_PLOTS = True
 PLOT_DPI = 170
 COORD_COLS = ["fcp_x", "fcp_y", "coordinate_X", "coordinate_Y"]
+ANALYSIS_AXES = ["x"]  # 14~19번 실제 오차 분석. Y도 필요하면 ["x", "y"]
 
 INPUT_STEMS = {
     "ADI": "15_ADI_FINAL", "OCO": "15_OCO_FINAL",
@@ -183,6 +186,7 @@ for name, frame, values in [("ADI", df_adi, ["X_reg", "Y_reg"]), ("OCO", df_oco,
     require(frame, PAIR_KEYS + COORD_COLS + values, name)
     if frame[PAIR_KEYS].isna().any().any() or frame["LOT_ID"].eq("").any():
         raise ValueError(f"{name}: wafer 식별자가 비어 있습니다.")
+require(df_adi, [f"raw_{axis}" for axis in ANALYSIS_AXES], "ADI 실제 오차: raw")
 wafer_match = df_adi[PAIR_KEYS].drop_duplicates().merge(df_oco[PAIR_KEYS].drop_duplicates(), on=PAIR_KEYS, how="outer", indicator="match_status", validate="1:1")
 common_wafers = wafer_match.loc[wafer_match["match_status"].eq("both"), PAIR_KEYS]
 save_table("02_WAFER_MATCH", wafer_match)
@@ -277,8 +281,8 @@ def plot_statistics(frame, left, right, name):
     save_figure(fig, name)
 ''')
 
-md('''## 04. 비교 ① ADI Reg ↔ OCO Reg
-기존 Reg의 X/Y mean과 3σ를 wafer별로 연결합니다. GROUP·측정 위치가 서로 달라도 저장된 전체 행으로 계산하며, 유효점 수를 함께 저장합니다.''')
+md('''## 04. 참고 ① 계측 출력 ADI Reg ↔ OCO Reg
+기존 Reg의 X/Y mean과 3σ를 wafer별로 연결합니다. 실제 ADI 오차인 raw와의 비교는 17번에서 별도로 수행합니다. GROUP·측정 위치가 서로 달라도 저장된 전체 행으로 계산하며, 유효점 수를 함께 저장합니다.''')
 code('reg-comparison', '''
 adi_reg_stats = wafer_statistics(df_adi, ["X_reg", "Y_reg"], "adi_reg")
 oco_reg_stats = wafer_statistics(df_oco, ["X_reg", "Y_reg"], "oco_reg")
@@ -339,6 +343,8 @@ save_table("06_IDEAL_PSM_RAW_CPE_COEFFICIENTS", raw_cpe.drop(columns=["_cx", "_c
 ''')
 
 md('''## 07. ΔK → ADI point 보정 차이 → simulated Reg
+이 단계는 기적용/ideal K를 교체하는 기존 시뮬레이션입니다. 14번 이후의 **ADI raw WK/RK 보정량을 OCO Reg에 전달하는 시뮬레이션**과 구분합니다. 시작값을 raw로 일괄 변경하지 마세요. 기존 식에 MRC/PSM 교체 항이 이미 포함되어 있습니다.
+
 ΔK=기적용 K−ideal 적용 K입니다. MRC 차이는 `−B_MRC×ΔK`, PSM 차이는 `+B_CPE38×ΔK`로 계산하고 **sim_Reg = 기존 Reg − ΔMRC − ΔPSM**을 적용합니다. 실제 PERSHOT 값으로 기존 Reg를 재구성하거나 저장 residual로 대체하지 않습니다.
 
 PSM partial NaN은 기존 평가 규칙처럼 0으로 처리하고 원값/처리 여부를 저장합니다. 전체 계수 결측·연결 실패는 NaN과 상태로 남깁니다. 동일 wafer에 여러 노광 이력이 있어 기존 계수의 소속을 구분할 수 없으면 자동 추정하지 않고 오류로 표시합니다.''')
@@ -459,7 +465,7 @@ if adi_saved_residual is not None and "UNIQUE_ID2" in df_adi_sim and "UNIQUE_ID2
         save_table("08_SIMULATION_VS_SAVED_ADI_RESIDUAL", residual_check)
 ''')
 
-md('''## 09. 비교 ② simulated ADI Reg ↔ OCO real_residual
+md('''## 09. 참고 ② 기존 ΔK simulated ADI ↔ OCO real_residual
 X/Y 각각 mean과 3σ를 비교합니다. residual mean이 0 근처로 거의 일정하면 mean 상관은 NaN으로 표시될 수 있습니다. 산점도의 원단위는 모두 nm입니다.''')
 code('simulation-comparison', '''
 adi_sim_stats = wafer_statistics(df_adi_sim, ["sim_reg_x_um", "sim_reg_y_um"], "adi_sim")
@@ -472,6 +478,8 @@ plot_statistics(sim_pairs, "adi_sim", "oco_residual", "09_SIM_ADI_vs_OCO_RESIDUA
 ''')
 
 md('''## 10. Reg에서 wafer WK/RK 계수 새로 추출
+이 계수는 계측 출력의 참고 비교용입니다. 실제 ADI 최적화에는 14번에서 별도로 추출하는 `raw_k_adi`를 사용합니다. `reg_k_adi`를 OCO 보정 입력으로 사용하지 않습니다.
+
 ADI/OCO의 **X_reg/Y_reg**를 입력으로 WK 10개+RK 9개를 방향별로 동시 최소제곱 회귀합니다. raw 회귀 계수를 재사용하지 않습니다. 유효점 19개 미만은 생략하고, rank가 19 미만이면 계수 해석에 영향을 주므로 진단에 남깁니다.''')
 code('reg-regression', '''
 def fit_reg_terms(frame, mode):
@@ -651,7 +659,17 @@ for path in [OUTPUT_DIR / "saved_files.csv", OUTPUT_DIR / "run_settings.json"]:
 print("완료: Reg 통계 / ADI ideal 보정 simulation / Reg WK·RK term 상관")
 ''')
 
+extension = (Path(__file__).parent / 'ADI_Raw_OCO_Reg_14_19.py').read_text(encoding='utf-8')
+for section in extension.split('# %% ')[1:]:
+    title, source = section.split('\n', 1)
+    md('## ' + title)
+    code('adi-raw-' + title.split('.')[0], source)
+
 md('''## 수정·재실행 안내
+- 실제 분석 기준은 ADI raw / OCO Reg입니다. 새 결과는 `output_oco_adi_raw_optimized`에 저장합니다.
+- ADI raw 회귀와 OCO 시뮬레이션은 14~19번입니다. ADI Reg 회귀 계수를 다시 사용하지 않도록 입력 컬럼 출처를 검사합니다.
+- 14~19번만 교체하려면 `ADI_Raw_OCO_Reg_14_19.py`의 `# %%` 구분별 코드를 기존 13번 뒤에 붙입니다. 이전 14~19번은 삭제합니다.
+- 새 분석의 X/Y는 `ANALYSIS_AXES`로 지정하며 방향별로 결측을 따로 처리합니다. 기본값은 X만입니다.
 - 입력 파일명/경로, nm 환산 방식, reference를 바꾸려면 00에서 수정합니다.
 - 통계/상관 정의 변경은 03을 수정하고 04, 09, 12, 13을 다시 실행합니다.
 - ΔK simulation 변경은 07부터, Reg 회귀 변경은 10부터 다시 실행합니다.

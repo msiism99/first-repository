@@ -148,6 +148,50 @@ def functions_from_notebook(base):
 
 
 class CorrelationTests(unittest.TestCase):
+    def test_adi_raw_basis_and_oco_reg_target_with_x_only(self):
+        env = functions_from_notebook(None)
+        env.update(OPT_AXES=['x'], OPT_RAW_COLS={'x': 'raw_x', 'y': 'raw_y'}, OPT_REG_COLS={'x': 'X_reg', 'y': 'Y_reg'})
+        rng = np.random.default_rng(20261017)
+        frames, known = {}, {}
+        for mode, count in [('ADI', 130), ('OCO', 113)]:
+            coords = np.column_stack([rng.uniform(-120000, 120000, (count, 2)), rng.uniform(-12000, 12000, (count, 2))])
+            frame = pd.DataFrame(coords, columns=env['COORD_COLS']).assign(LOT_ID='RAW_TEST', Wafer=1, photo_transn_seq=9)
+            matrix = env['osr_wk20p_rk20p'](*(frame[col].to_numpy() for col in env['COORD_COLS']))[0]
+            beta_raw = rng.normal(size=19) * .002 if mode == 'ADI' else known['ADI']
+            beta = beta_raw if mode == 'ADI' else 1.25 * beta_raw
+            noise = rng.normal(0, .00001, count)
+            noise -= matrix @ np.linalg.lstsq(matrix, noise, rcond=None)[0]
+            frame['X_reg'] = matrix @ (10 * beta_raw if mode == 'ADI' else beta) + noise
+            frame['raw_x'] = matrix @ beta_raw + noise if mode == 'ADI' else 500 * frame['X_reg']
+            # The selected X analysis must not require either Y column.
+            frames[mode], known[mode] = frame, beta_raw if mode == 'ADI' else beta
+        adi_snapshot, oco_snapshot = frames['ADI'].copy(deep=True), frames['OCO'].copy(deep=True)
+        _, raw_coef, _ = env['fit_selected_terms'](frames['ADI'], 'ADI_RAW', {'x': 'raw_x'})
+        np.testing.assert_allclose(raw_coef['k_reg'], known['ADI'], rtol=1e-9, atol=1e-11)
+        simulated, audit = env['simulate_oco_from_adi_raw'](frames['OCO'], raw_coef)
+        matrix = env['osr_wk20p_rk20p'](*(frames['OCO'][col].to_numpy() for col in env['COORD_COLS']))[0]
+        expected = frames['OCO']['X_reg'] - matrix @ known['ADI']
+        np.testing.assert_allclose(simulated['oco_sim_x_um'], expected, rtol=1e-9, atol=1e-11)
+        self.assertLess(simulated['oco_sim_x_um'].std(), frames['OCO']['X_reg'].std())
+        self.assertTrue(simulated['simulation_valid'].all())
+        self.assertEqual(audit['n_simulated'].sum(), len(simulated))
+        assert_frame_equal(adi_snapshot, frames['ADI'])
+        assert_frame_equal(oco_snapshot, frames['OCO'])
+        _, reg_coef, _ = env['fit_selected_terms'](frames['ADI'], 'ADI_REG', {'x': 'X_reg'})
+        with self.assertRaisesRegex(ValueError, '계수 출처'):
+            env['simulate_oco_from_adi_raw'](frames['OCO'], reg_coef)
+        with self.assertRaisesRegex(ValueError, '필수 컬럼'):
+            env['fit_selected_terms'](frames['ADI'].drop(columns='raw_x'), 'ADI_RAW', {'x': 'raw_x'})
+        with self.assertRaisesRegex(ValueError, '중복'):
+            env['simulate_oco_from_adi_raw'](frames['OCO'], pd.concat([raw_coef, raw_coef.iloc[[0]]]))
+        missing, _ = env['simulate_oco_from_adi_raw'](frames['OCO'], raw_coef.iloc[1:])
+        self.assertTrue(missing['oco_sim_x_um'].isna().all())
+        bad_rank = raw_coef.assign(fit_valid=False)
+        invalid, _ = env['simulate_oco_from_adi_raw'](frames['OCO'], bad_rank)
+        self.assertTrue(invalid['simulation_status_x'].eq('rank_deficient_adi_raw_k').all())
+        zero, _ = env['simulate_oco_from_adi_raw'](frames['OCO'], raw_coef.assign(k_reg=0.))
+        np.testing.assert_allclose(zero['oco_sim_x_um'], frames['OCO']['X_reg'])
+
     def test_notebook_structure_and_legacy_basis(self):
         notebook = nbformat.read(NOTEBOOK, as_version=4)
         nbformat.validate(notebook)
@@ -289,6 +333,49 @@ print("Missing PSM key correctly produces NaN and leaves other shots valid")
             self.assertFalse(settings['point_matching'])
             self.assertIsNone(settings['group_filter'])
             self.assertEqual(settings['k_reference'], 'ADI')
+            corrected = base / 'output_oco_adi_raw_optimized'
+            corrected_tables = corrected / 'tables'
+            raw_coeff = pd.read_parquet(corrected_tables / '14_ADI_RAW_WK_RK_COEFFICIENTS.parquet')
+            self.assertTrue(raw_coeff['axis'].eq('x').all())
+            self.assertTrue(raw_coeff['mode'].eq('ADI_RAW').all())
+            self.assertTrue(raw_coeff['input_column'].eq('raw_x').all())
+            reference_raw = frames['21_ADI_WK_WAFER_COEFFICIENTS'].merge(frames['21_ADI_RK_WAFER_COEFFICIENTS'], on=['LOT_ID', 'Wafer'])
+            for row in raw_coeff.itertuples():
+                expected = reference_raw.loc[reference_raw['LOT_ID'].eq(row.LOT_ID) & reference_raw['Wafer'].eq(row.Wafer), row.term + '_X'].iloc[0]
+                self.assertAlmostEqual(row.k_reg, expected, places=9)
+            raw_sim = pd.read_parquet(corrected_tables / '14_OCO_SIMULATED_POINTS.parquet')
+            np.testing.assert_allclose(raw_sim['X_reg'], frames['15_OCO_FINAL']['X_reg'])
+            np.testing.assert_allclose(raw_sim['oco_sim_x_um'], raw_sim['X_reg'] - raw_sim['adi_total_on_oco_x_um'], atol=1e-12)
+            for key, group in raw_sim.groupby(['LOT_ID', 'Wafer', 'photo_transn_seq']):
+                selected = raw_coeff.loc[raw_coeff['LOT_ID'].eq(key[0]) & raw_coeff['Wafer'].eq(key[1])].set_index('term')
+                names = [f'WK{i}' for i in range(1, 21, 2)] + [f'RK{i}' for i in range(3, 21, 2)]
+                matrix = basis(*(group[col].to_numpy() for col in ['fcp_x', 'fcp_y', 'coordinate_X', 'coordinate_Y']))[0]
+                np.testing.assert_allclose(group['adi_total_on_oco_x_um'], matrix @ selected.loc[names, 'k_reg'].to_numpy(), rtol=1e-9, atol=1e-12)
+            identity = pd.read_parquet(corrected_tables / '15_K_REG_MINUS_ADI_RAW_CHECK.parquet')
+            self.assertTrue(identity['identity_check_valid'].all())
+            self.assertLess(identity['k_identity_error'].abs().max(), 1e-9)
+            raw_statistics = pd.read_parquet(corrected_tables / '17_ADI_RAW_VS_OCO_REG_WAFER_STATISTICS.parquet')
+            before_after = pd.read_parquet(corrected_tables / '17_OCO_REG_VS_SIM_WAFER_STATISTICS.parquet')
+            for row in raw_statistics.itertuples():
+                mask_adi = frames['15_ADI_FINAL']['LOT_ID'].eq(row.LOT_ID) & frames['15_ADI_FINAL']['Wafer'].eq(row.Wafer)
+                adi_values = frames['15_ADI_FINAL'].loc[mask_adi, 'raw_x'].to_numpy() * 1000
+                self.assertAlmostEqual(row.adi_raw_x_mean_nm, np.mean(adi_values), places=9)
+                self.assertAlmostEqual(row.adi_raw_x_3sigma_nm, 3*np.std(adi_values, ddof=1), places=9)
+            for row in before_after.itertuples():
+                selected = raw_sim.loc[raw_sim['LOT_ID'].eq(row.LOT_ID) & raw_sim['Wafer'].eq(row.Wafer) & raw_sim['simulation_valid_x']]
+                for prefix, column in [('oco_reg', 'X_reg'), ('oco_sim', 'oco_sim_x_um')]:
+                    values = selected[column].to_numpy() * 1000
+                    self.assertAlmostEqual(getattr(row, f'{prefix}_x_mean_nm'), np.mean(values), places=9)
+                    self.assertAlmostEqual(getattr(row, f'{prefix}_x_3sigma_nm'), 3*np.std(values, ddof=1), places=9)
+                    self.assertAlmostEqual(getattr(row, f'{prefix}_x_mean_plus_3sigma_nm'), np.mean(values)+3*np.std(values, ddof=1), places=9)
+                    self.assertEqual(getattr(row, f'{prefix}_x_n_valid'), len(values))
+            for record in pd.read_csv(corrected / 'saved_files.csv').itertuples():
+                self.assertEqual(len(pd.read_parquet(record.parquet)), record.rows)
+            self.assertEqual(len(list((corrected / 'plots').glob('*.png'))), 7)
+            corrected_settings = json.loads((corrected / 'run_settings.json').read_text())
+            self.assertEqual(corrected_settings['adi_basis'], 'raw_x/raw_y')
+            self.assertEqual(corrected_settings['oco_basis'], 'X_reg/Y_reg')
+            self.assertEqual(corrected_settings['axes'], ['x'])
 
 
 if __name__ == '__main__':

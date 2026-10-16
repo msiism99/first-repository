@@ -1,4 +1,40 @@
-# ADI/OCO wafer별 상관 분석
+# ADI raw / OCO Reg 상관 및 보정 전달 시뮬레이션
+
+**확정 기준: ADI는 raw_x/raw_y, OCO는 기존 X_reg/Y_reg.** ADI Reg는 계측 출력의 참고 값이며 실제 ADI 최적화의 입력으로 사용하지 않습니다.
+
+두 노트북과 교체용 셀을 함께 받으려면 `ADI_Raw_OCO_Reg_Corrected_Package.zip`을 사용하세요. 압축을 풀어 노트북을 `C:\PHOTO_ANALYSIS\BASIC`에 둡니다. `MRC_PSM_decorrect.ipynb`는 설명만 보완했으며 계산 코드는 동일합니다. 기존 stages 파일이 있으면 DB 조회나 decorrect 전체 재실행 없이 상관 노트북을 실행하면 됩니다.
+
+## 현재 분석: 14~19번
+
+- 새 출력: `C:\PHOTO_ANALYSIS\BASIC\output_oco_adi_raw_optimized`의 `tables`, `plots`.
+- `ANALYSIS_AXES=["x"]`가 기본입니다. Y도 분석하려면 00에서 `["x", "y"]`로 지정합니다. 새 분석은 방향별로 결측값을 따로 처리합니다.
+- 14: `15_ADI_FINAL`의 **raw**에서 wafer WK/RK를 새로 회귀합니다. OCO는 **Reg**에서 회귀합니다. 이전 `reg_k_adi`와 별개인 `raw_k_adi`를 사용합니다.
+- 14: 같은 wafer의 raw 계수를 **OCO 측정 좌표에서** 평가합니다. `OCO_sim = OCO_Reg - B_OCO @ K_ADI_raw`이며 전달계수는 1입니다. 입력 출처가 Reg인 계수는 함수에서 거부합니다.
+- 15: OCO_sim을 새로 회귀하고 유효한 회귀에 대해 `K_sim ≈ K_OCO_Reg - K_ADI_raw`를 확인합니다.
+- 16: ADI raw / OCO Reg의 K 비교와 OCO Reg / simulation의 K 비교를 각각 저장합니다. 같은 reference 좌표에서 nm로 환산합니다.
+- 17: ADI raw ↔ OCO Reg의 wafer 통계와 OCO Reg ↔ simulation의 wafer 통계를 저장합니다. mean, 3sigma, **signed mean+3sigma**이며 std의 ddof는 00 설정을 사용합니다. OCO 전후 통계는 방향별 동일한 측정점으로 계산합니다.
+- 18: 두 통계 비교, 두 K 비교의 산점도와 OCO K 절대 기여량의 전후 막대그래프를 저장합니다.
+- 19: 보정량 산포, OCO Reg와 보정량의 위치별 상관, 빼기/더하기, WK/RK 단독 적용을 진단합니다.
+
+`14_ADI_RAW_WK_RK_COEFFICIENTS`의 `k_reg`는 기존 nm 환산 함수와 호환하기 위한 열 이름입니다. `mode=ADI_RAW`, `input_column=raw_x/raw_y`로 실제 계수 출처를 저장합니다.
+
+기존 노트북을 유지하면서 셀만 바꾸려면 `ADI_Raw_OCO_Reg_14_19.py`의 각 `# %%` 구간을 새 코드 셀로 붙입니다. 이전 14~19번은 이 코드로 교체하고 00~13번이 실행된 커널에서 순서대로 실행합니다. `.py`는 노트북에서 import할 필요가 없습니다. 업데이트한 전체 노트북에는 이 코드가 이미 포함되어 있습니다.
+
+주요 결과:
+
+| 파일명 (`tables` / `plots`) | 내용 |
+|---|---|
+| `14_ADI_RAW_WK_RK_COEFFICIENTS` | 실제 보정 입력인 ADI raw K |
+| `14_OCO_SIMULATED_POINTS` | OCO 원본 Reg, raw 보정량, input 변화량, OCO_sim |
+| `15_K_REG_MINUS_ADI_RAW_CHECK` | 계수 차이 검증 |
+| `16_ADI_RAW_VS_OCO_REG_K_NM` | 동일 wafer의 ADI raw / OCO Reg K 비교 |
+| `16_OCO_REG_VS_SIM_K_NM` | OCO K의 전후 nm 값과 변화량 |
+| `17_ADI_RAW_VS_OCO_REG_WAFER_STATISTICS` | ADI raw / OCO Reg mean·3sigma·mean+3sigma |
+| `17_OCO_REG_VS_SIM_WAFER_STATISTICS` | 동일 OCO 측정점에서 전후 통계 |
+| `18_OCO_REG_VS_SIM_K_MAGNITUDE.png` | OCO term 절대 기여량의 전후 wafer 평균 |
+| `19_OCO_SIM_SPREAD_DIAGNOSTIC` | 산포 변화 원인 진단 |
+
+raw 기반 보정이 OCO에서도 항상 산포를 줄인다는 보장은 없습니다. ADI Reg를 회귀했던 이전 결과는 이 raw 기반 분석과 구분하세요. 기존 00~13번은 계측 출력 및 ΔK 방식의 참고 분석으로 보존합니다. 아래는 해당 참고 분석의 설명입니다.
 
 `ADI_OCO_Correlation.ipynb` 하나로 실행합니다. `build_notebook.py`와 테스트 코드는 다운로드 후 실행할 때 필요하지 않습니다.
 
@@ -9,7 +45,7 @@
 - 출력: `C:\PHOTO_ANALYSIS\BASIC\output_adi_oco_correlation`
 - 표: 출력 폴더의 `tables`, 그래프: `plots`
 
-노트북 00부터 13까지 순서대로 실행합니다. 각 단계에 결과 DataFrame과 저장 파일을 남깁니다. 원본 `MRC_PSM_decorrect.ipynb`를 실행 중인 커널과 별개로 실행할 수 있습니다. pandas, numpy, scipy, matplotlib, pyarrow, openpyxl, IPython이 필요합니다.
+노트북 00부터 19까지 순서대로 실행합니다. 각 단계에 결과 DataFrame과 저장 파일을 남깁니다. 원본 `MRC_PSM_decorrect.ipynb`를 실행 중인 커널과 별개로 실행할 수 있습니다. pandas, numpy, scipy, matplotlib, pyarrow, openpyxl, IPython이 필요합니다.
 
 입력은 같은 stem의 Parquet을 먼저 선택하고 없으면 전체 Excel을 읽습니다. `_sample_행수.xlsx`는 전체 입력으로 사용하지 않습니다. 출력 표는 전체 Parquet/CSV와 Excel로 저장합니다. 10,000행을 넘는 Excel은 `_sample_10000`으로 표시하며 00에서 이 제한을 변경할 수 있습니다. PNG/PDF 그래프와 전체 설정·파일 목록도 저장합니다.
 
