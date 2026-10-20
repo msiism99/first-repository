@@ -12,12 +12,10 @@ from IPython.display import display, FileLink
 
 CTX_BASE_DIR = Path(r"C:\PHOTO_ANALYSIS\BASIC")
 CTX_STAGE_DIR = CTX_BASE_DIR / "output_decorrect_notebook" / "stages"
-CTX_SNAPSHOT_DIR = CTX_STAGE_DIR.parent / "snapshots"
 CTX_OUTPUT_DIR = CTX_BASE_DIR / "output_wafer_context"
 CTX_KEYS = ["LOT_ID", "Wafer", "photo_transn_seq"]
 CTX_EXTRA_COLUMNS = []  # 자동 제외되는 컬럼도 필요하면 원본 이름을 추가하세요.
 CTX_CELL_LIMIT = 30000
-CTX_SNAPSHOTS = {"07_F1_QUERY": "f1", "11_APC_MAIN_QUERY": "apc_main", "11_APC_EEXY_QUERY": "apc_eexy"}
 CTX_ALIASES = {"LOT_ID": ["LOT_ID", "lotid", "lot_id"], "Wafer": ["Wafer", "slotid", "slot_id", "wafer"], "photo_transn_seq": ["photo_transn_seq"]}
 CTX_LINK_IDS = ["lot_transn_seq", "apc_hist_index_no", "apc_trocs_hist_index_no"]
 CTX_PROFILE = ["fcp_x", "fcp_y", "TEST", "Is_Edge_Shot"]
@@ -74,8 +72,6 @@ def ctx_read(stem, required=False):
     if stem in ctx_cache:
         return ctx_cache[stem]
     candidates = [CTX_STAGE_DIR / f"{stem}.parquet", CTX_STAGE_DIR / f"{stem}.xlsx"]
-    if stem in CTX_SNAPSHOTS:
-        candidates.append(CTX_SNAPSHOT_DIR / f"{CTX_SNAPSHOTS[stem]}.parquet")
     available = [path for path in candidates if path.is_file()]
     samples = list(CTX_STAGE_DIR.glob(f"{stem}_sample_*.xlsx"))
     failures = []
@@ -306,7 +302,7 @@ context_notes = pd.DataFrame([
     ["여러 값", "같은 wafer의 값이 여러 개면 |로 병기합니다. 임의의 첫 값을 고르지 않습니다. Multiple_values와 Context_values에서 확인하세요."],
     ["제외", "측정값, point 좌표, K 계수는 context에서 제외합니다. 추가하려면 CTX_EXTRA_COLUMNS에 원본 이름을 지정하세요."],
     ["미저장 정보", "저장 파일에 없는 device/product 등의 정보는 새로 조회하거나 추정하지 않습니다."],
-    ["입력 파일", "stages의 전체 Parquet → 전체 Excel 순서. 일부 QUERY는 없으면 snapshots에서 읽습니다. sample Excel은 제외합니다."],
+    ["입력 파일", "stages의 전체 Parquet → 전체 Excel 순서로 읽습니다. sample Excel은 제외합니다."],
     ["데이터 기준", "ADI 실제 오차=raw, OCO 비교 기준=Reg. 이 단계는 측정값이나 보정값을 변경하지 않습니다."],
 ], columns=["항목", "설명"])
 for name, frame in [("wafer_context", wafer_context), ("wafer_context_values", context_values)]:

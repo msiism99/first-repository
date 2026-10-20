@@ -1,0 +1,23 @@
+# MRC_PSM_decorrect 저장 코드 정리
+
+압축의 `MRC_PSM_decorrect.ipynb`를 `C:\PHOTO_ANALYSIS\BASIC`에 넣고 기존과 같이 위에서 아래로 실행합니다. 00~32의 단계와 보정 계산을 유지합니다.
+
+이번 정리에서는 조회 결과의 별도 복사본과 SQL/manifest를 저장하던 기능, 그 파일을 읽는 replay 설정, `saved_files.csv` 생성 및 목록 표시를 제거했습니다. 조회는 사내 `bigdataquery`를 사용합니다. 동일 SQL의 메모리 cache는 유지하며 필요하면 `source.release_cache()`로 비울 수 있습니다.
+
+## 유지되는 출력
+
+- `output_decorrect_notebook/stages`: 조회 원본, MRC/PSM decorrect, TROCS, WK/RK, CPE 및 최종 결과의 전체 Parquet과 Excel 미리보기.
+- 원본 조회도 `02_LOTINFO_OCO_QUERY`, `03_LOTINFO_ADI_QUERY`, `05_RAWDATA_*_QUERY`, `07_F1_QUERY`, `11_APC_*_QUERY`, `12_PSM_SHOT_QUERY` 등 기존 단계 이름으로 **stages에 직접 저장**합니다.
+- 큰 Excel은 기존처럼 `_sample_행수.xlsx`입니다. 전체 자료는 Parquet을 사용합니다. 파일 링크는 각 셀에 표시합니다.
+- `extension_settings.json`: 후속 회전·sampling 분석이 읽는 CPE 설정을 계속 저장합니다.
+- 29~32의 wafer context Excel/Parquet/CSV. context 입력도 stages만 사용합니다.
+
+기존 저장 자료를 이어 쓸 때, F1/APC 원본 조회 파일이 stages에 없다면 해당 조회 셀을 다시 실행해 저장하세요. 기존에 만들어진 파일을 자동 삭제하지는 않습니다.
+
+ADI 실제 오차는 raw, 후속 상관 분석의 OCO 기준은 Reg라는 정의를 유지합니다. MRC/PSM 부호, TROCS 연결, WK/RK 및 CPE의 계산식을 변경하지 않았습니다.
+
+## 검증
+
+`python -m unittest MERGE.decorrect.test_storage MERGE.context.test_context -v`
+
+동일 SQL 재사용·반환값 보호, 전체 Parquet/Excel 미리보기 저장, 제거된 출력 미생성, 15/28 단계 실행과 context의 stages 연결을 합성 데이터 및 실제 Jupyter 커널에서 확인합니다. 사내 DB에는 접속하지 않습니다.

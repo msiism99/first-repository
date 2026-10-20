@@ -19,7 +19,7 @@ for section in (HERE / 'Wafer_Context_29_32.py').read_text(encoding='utf-8').spl
 notebook['cells'] = original + extension
 assert notebook['cells'][:len(original)] == original
 MAIN.write_text(json.dumps(notebook, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
-intro = dict(cell_type='markdown', id='wafer-context-intro', metadata={}, source='# Wafer context 추출: 29~32번\n기존 노트북 끝에 복사하거나 이 파일만 단독 실행합니다. 저장된 stages와 일부 snapshots만 읽으며 DB 조회나 앞 단계 실행은 필요 없습니다. 경로는 29번에서 지정합니다.\n')
+intro = dict(cell_type='markdown', id='wafer-context-intro', metadata={}, source='# Wafer context 추출: 29~32번\n기존 노트북 끝에 복사하거나 이 파일만 단독 실행합니다. 저장된 stages만 읽으며 DB 조회나 앞 단계 실행은 필요 없습니다. 경로는 29번에서 지정합니다.\n')
 standalone = dict(nbformat=4, nbformat_minor=5, metadata=notebook['metadata'], cells=[intro] + extension)
 (HERE / 'Wafer_Context_29_32.ipynb').write_text(json.dumps(standalone, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
 with zipfile.ZipFile(HERE / 'Wafer_Context_Package.zip', 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:

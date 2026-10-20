@@ -17,9 +17,8 @@ BIG_PHOTO = 9007199254740993
 
 
 def fixtures(base):
-    stage, snapshots = base / 'output_decorrect_notebook/stages', base / 'output_decorrect_notebook/snapshots'
+    stage = base / 'output_decorrect_notebook/stages'
     stage.mkdir(parents=True)
-    snapshots.mkdir()
 
     def point(wafer, photo, apc, index, mode):
         return dict(LOT_ID='LOT_A', Wafer=wafer, photo_transn_seq=photo, P_EQPID=mode+'_EQP', ReticleID='RET_A' if index % 2 else 'RET_B', Photo_PPID='RECIPE', ChuckID='CH1', M_TIME=pd.Timestamp('2026-10-16 09:00'), P_TIME=pd.Timestamp('2026-10-16 08:00'), apc_hist_index_no=apc, apc_trocs_hist_index_no=apc+800, GROUP='E1' if mode == 'ADI' else 'E2', TEST=index % 5, fcp_x=float(index % 2), fcp_y=0., Is_Edge_Shot=index % 2 == 0, raw_x=123., X_reg=456., Y_reg=0., WK1_X=777., MRC_RX=4., operator_note='=literal_text', product_family='PRODUCT_X')
@@ -45,11 +44,11 @@ def fixtures(base):
     for mode in ['ADI','OCO']:
         lots.to_parquet(stage / f'04_LOTINFO_{mode}_SELECTED.parquet', index=False)
     f1 = pd.DataFrame([dict(lotid='LOT_A', slotid=9, photo_transn_seq=100, base_eqp_id1=name, impala_insert_time=pd.Timestamp(date)) for name,date in [('OLD_F1','2026-10-15'), ('LATEST_F1','2026-10-16')]])
-    f1.to_parquet(snapshots / 'f1.parquet', index=False)
+    f1.to_parquet(stage / '07_F1_QUERY.parquet', index=False)
     apc = pd.DataFrame([dict(lot_id=lot, apc_hist_index_no=apc_id, apc_trocs_hist_index_no=apc_id+800, eqp_id=eqp, sub_eqp_id='EX1', reticle_id=reticle, run_type='NORMAL', event_tsdt='2026-10-16') for lot,apc_id,eqp,reticle in [('LOT_A',110,'APC_CORRECT','APC_RET'),('LOT_A',120,'APC_BIG_PHOTO','APC_RET2'),('LOT_A',999,'WRONG_OTHER_HISTORY','WRONG'),('LOT_OTHER',110,'WRONG_OTHER_LOT','WRONG')]])
     apc.to_parquet(stage / '11_APC_MATCHED.parquet', index=False)
-    apc.drop(columns='apc_trocs_hist_index_no').to_parquet(snapshots / 'apc_main.parquet', index=False)
-    apc[['lot_id','apc_trocs_hist_index_no','eqp_id','event_tsdt']].to_parquet(snapshots / 'apc_eexy.parquet', index=False)
+    apc.drop(columns='apc_trocs_hist_index_no').to_parquet(stage / '11_APC_MAIN_QUERY.parquet', index=False)
+    apc[['lot_id','apc_trocs_hist_index_no','eqp_id','event_tsdt']].to_parquet(stage / '11_APC_EEXY_QUERY.parquet', index=False)
     psm = apc.copy().assign(pos_x_valn=0., pos_y_valn=0., mrc_k1_valn=5.)
     (stage / '12_PSM_INPUT.parquet').write_bytes(b'corrupt parquet - must fall back to full excel')
     psm.to_excel(stage / '12_PSM_INPUT.xlsx', index=False)

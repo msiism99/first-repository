@@ -7,7 +7,6 @@
 ```text
 노트북 위치: C:\PHOTO_ANALYSIS\BASIC
 입력: C:\PHOTO_ANALYSIS\BASIC\output_decorrect_notebook\stages
-일부 QUERY 보완: C:\PHOTO_ANALYSIS\BASIC\output_decorrect_notebook\snapshots
 출력: C:\PHOTO_ANALYSIS\BASIC\output_wafer_context
 ```
 
@@ -47,3 +46,5 @@ APC ID는 여러 wafer가 공유할 수 있으므로, 각 wafer에 실제 저장
 모든 선택 파일에서 측정값·point 좌표·WK/RK/CPE 계수 등을 제외한 컬럼을 수집하므로 추가 context 컬럼도 자동으로 포함됩니다. 자동 제외 컬럼도 필요하면 `CTX_EXTRA_COLUMNS`에 이름을 넣으세요. DB에만 있고 저장되지 않은 product/device 정보는 조회하거나 만들어내지 않습니다.
 
 Parquet은 필요한 컬럼을 batch로 읽고, Excel도 행 단위로 나눠 읽습니다. 반복 metadata는 중복을 줄이되 point/shot/batch 개수는 원본 행에서 집계합니다. `_sample_...xlsx`는 일부 자료이므로 입력으로 사용하지 않습니다. 필수 대표 자료가 없으면 오류를 내고, 선택 정보의 누락은 Sources/Joins에 기록합니다.
+
+F1 및 APC 원본 조회 정보도 `stages/07_F1_QUERY`, `stages/11_APC_MAIN_QUERY`, `stages/11_APC_EEXY_QUERY`에서 읽습니다. 이 전체 파일이 없다면 수정한 본 노트북의 해당 조회 셀을 실행해 저장하세요.
