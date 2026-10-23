@@ -6,6 +6,8 @@
 
 ADI/OCO 모두 27번 CPE shot 계수·진단·통계와 28번 최종 shot 통계까지 DieX/DieY가 이어집니다. 처음부터 실행할 때는 본 노트북만 사용하면 됩니다.
 
+OCO edge 추가본: 00번의 `cfg.include_oco_edge = True`, `cfg.target_mstepseq_oco_edge = "VC077252"`, `cfg.oco_edge_scale = 0.6`으로 별도 edge 측정을 포함합니다. 수정 범위와 교체 셀은 `MRC_PSM_OCO_Edge_Package.zip`에 있습니다. Edge RAWDATA의 X/Y에만 조회 직후 배율을 적용하며 기존 E2 필터를 유지합니다.
+
 이번 정리에서는 조회 결과의 별도 복사본과 SQL/manifest를 저장하던 기능, 그 파일을 읽는 replay 설정, `saved_files.csv` 생성 및 목록 표시를 제거했습니다. 조회는 사내 `bigdataquery`를 사용합니다. 동일 SQL의 메모리 cache는 유지하며 필요하면 `source.release_cache()`로 비울 수 있습니다.
 
 ## 유지되는 출력
