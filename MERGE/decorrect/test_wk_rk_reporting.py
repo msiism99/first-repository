@@ -1,5 +1,6 @@
 """Regression tests for real wafer/shot reporting; no production data or DB access."""
 import ast
+from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
@@ -140,6 +141,27 @@ class ReportingTests(unittest.TestCase):
         raw = pd.DataFrame([dict(lot_transn_seq=1, slot_id=w, data_kind="RAWDATA", transn_occur_date="2026-10-20 12:00:00") for w in [9, 10, 11, 12, 14]])
         retained = ns["latest_raw_batch"](raw, selected)
         self.assertEqual(set(retained.slot_id), {11, 12})
+
+    def test_cpe_exports_keep_shot_indices_and_skipped_shots(self):
+        ns = dict(self.ns, dataclass=dataclass)
+        exec(section(self.document, 18).split("\ndef summarize_values")[0], ns)
+        for number in range(22, 27):
+            exec(section(self.document, number), ns)
+        data = fixture().iloc[list(range(16)) + list(range(40, 48))].copy().reset_index(drop=True)
+        data["raw_minus_total_fit_x"], data["raw_minus_total_fit_y"] = data.raw_x, data.raw_y
+        data.loc[16:, ["raw_minus_total_fit_x", "raw_minus_total_fit_y"]] = np.nan
+        exported = {}
+        ns.update(df_adi_reg=data.copy(), df_oco_reg=data.copy(), save_stage=lambda name, frame, **kw: exported.update({name: frame.copy()}))
+        exec(section(self.document, 27), ns)
+        for mode in ["ADI", "OCO"]:
+            for suffix in ["CPE_SHOT_COEFFICIENTS", "CPE_SHOT_DIAGNOSTICS", "CPE_SHOT_DATA"]:
+                result = exported[f"27_{mode}_{suffix}"]
+                self.assertTrue(result.shot_index_status.eq("ok").all())
+                self.assertFalse(result[["DieX", "DieY"]].isna().any().any())
+                self.assertEqual(len(result), 2 if suffix == "CPE_SHOT_COEFFICIENTS" else 3)
+                np.testing.assert_allclose(result.DieX.to_numpy(float) * 20000, result.fcp_x.to_numpy(float))
+            pd.testing.assert_frame_equal(exported[f"27_{mode}_FINAL_POINTS"][["DieX", "DieY"]], data[["DieX", "DieY"]])
+            self.assertEqual(exported[f"27_{mode}_CPE_SHOT_DIAGNOSTICS"].status.eq("no_valid_points").sum(), 1)
 
     def test_repair_notebook_real_kernel_parquet_excel_and_scope(self):
         notebook = nbformat.read(HERE / "WK_RK_20_21_Repair.ipynb", as_version=4)

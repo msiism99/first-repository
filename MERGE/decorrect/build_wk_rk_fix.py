@@ -29,6 +29,20 @@ for mode in ["adi", "oco"]:
     new = f"attach_measured_shot_indices({old}, df_{mode}_reg)"
     if new not in cell21["source"]:
         cell21["source"] = cell21["source"].replace(old, new)
+    for number, values in [(27, "cpe_values"), (28, "final_values")]:
+        cell = code_at(number)
+        old = f"summarize_values(df_{mode}_cpe, SHOT_KEYS, {values})"
+        new = f"attach_measured_shot_indices({old}, df_{mode}_cpe)"
+        if new not in cell["source"]:
+            cell["source"] = cell["source"].replace(old, new)
+cell27 = code_at(27)
+marker = "# 실측 shot index를 CPE 계수·진단에도 연결합니다."
+if marker not in cell27["source"]:
+    extra = marker + "\n"
+    for mode in ["adi", "oco"]:
+        extra += f"coef_{mode}_cpe = attach_measured_shot_indices(coef_{mode}_cpe, df_{mode}_cpe, require_all_shots=False)\n"
+        extra += f"df_cpe_diag_{mode} = attach_measured_shot_indices(df_cpe_diag_{mode}, df_{mode}_cpe)\n"
+    cell27["source"] = cell27["source"].replace("cpe_values =", extra + "\ncpe_values =")
 for cell in document["cells"]:
     if cell["cell_type"] == "code":
         compile(cell["source"], cell["id"], "exec")
@@ -36,6 +50,8 @@ for cell in document["cells"]:
         cell["outputs"], cell["execution_count"] = [], None
     elif cell["source"].startswith("## 21.") and "observed=True" not in cell["source"]:
         cell["source"] += "\n집계는 `observed=True`로 실제 입력에 존재하는 LOT/wafer/shot만 만듭니다. `DieX/DieY`는 실측 index이며 누락 시 `(fcp - MAP_SHIFT) / STEP_PITCH`로 복원합니다. (0,0)은 MAP_SHIFT 위치의 shot이고, 측정 shot 평균으로 재번호를 부여하지 않습니다. 반경으로 edge shot을 삭제하지 않습니다.\n"
+    elif cell["source"].startswith(("## 27.", "## 28.")) and "DieX/DieY" not in cell["source"]:
+        cell["source"] += "\nADI/OCO의 shot별 출력에도 실측 `DieX/DieY`를 연결합니다. 회귀되지 않은 shot은 진단·통계에는 남고 CPE 계수표에는 생성하지 않습니다.\n"
 MAIN.write_text(json.dumps(document, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
 

@@ -17,6 +17,7 @@
 
 - 집계와 WK/RK·CPE 그룹 순회에 `observed=True`를 명시했습니다. 15/18/21/27/28의 관련 통계가 실제 입력 그룹만 사용합니다. 18번 TROCS ALLMARKS 자체는 기존 목적의 가상 전체 mark이며 WK/RK 실측 목록을 만들 때 사용하지 않습니다.
 - `21_*_WK_RK_SHOT_DATA`에 `DieX`, `DieY`, `shot_index_status`를 추가했습니다. 원본 실측 Die index를 보존하고, 누락된 값만 `(fcp - MAP_SHIFT) / STEP_PITCH`로 복원합니다. `(0,0)`의 shot 중심은 `(MAP_SHIFT_X, MAP_SHIFT_Y)`입니다. 측정된 shot들의 평균이나 최소 좌표를 원점으로 사용하지 않습니다.
+- ADI/OCO 모두 27번 CPE shot 계수·진단·통계, 28번 최종 shot 통계까지 DieX/DieY를 연결합니다. Point별 결과의 기존 index도 유지합니다. CPE를 계산할 유효 point가 없는 shot은 진단·통계에는 남고 계수표에는 생성하지 않습니다.
 - 동일 shot 중심의 index 충돌은 오류로 표시합니다. index와 geometry가 모두 없으면 NA 및 `missing_geometry`를 표시합니다.
 - shot 중심 반경 150 mm로 자르지 않습니다. 실측 point가 있는 edge/partial shot은 중심이 wafer 밖일 수 있습니다. **실측에 없는 조합을 만들지 않는 것**으로 문제를 수정했습니다.
 - 회귀 matrix, least-squares, 최소 19개 유효 X/Y point 조건 및 raw 계산식은 유지했습니다. 실제 존재하지만 유효 point가 부족한 wafer는 통계에 남고, 기존 WAFER_DIAGNOSTICS에 `skip_too_few_points`로 기록됩니다.

@@ -4,6 +4,8 @@
 
 2026-10-23: wafer/shot 통계가 범주형의 미측정 조합을 생성하지 않도록 `observed=True`를 적용했고, 21번 shot 통계에 중앙 기준 DieX/DieY를 추가했습니다. 집계 함수가 18번에 있으므로 기존 변수로 이어 실행할 때는 18~21번을 다시 실행하세요. 저장된 19번 자료만으로 재계산하려면 별도 `MRC_PSM_WK_RK_Fix_Package.zip`의 `WK_RK_20_21_Repair.ipynb`를 사용합니다.
 
+ADI/OCO 모두 27번 CPE shot 계수·진단·통계와 28번 최종 shot 통계까지 DieX/DieY가 이어집니다. 처음부터 실행할 때는 본 노트북만 사용하면 됩니다.
+
 이번 정리에서는 조회 결과의 별도 복사본과 SQL/manifest를 저장하던 기능, 그 파일을 읽는 replay 설정, `saved_files.csv` 생성 및 목록 표시를 제거했습니다. 조회는 사내 `bigdataquery`를 사용합니다. 동일 SQL의 메모리 cache는 유지하며 필요하면 `source.release_cache()`로 비울 수 있습니다.
 
 ## 유지되는 출력

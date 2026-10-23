@@ -1,4 +1,4 @@
-def attach_measured_shot_indices(summary, points):
+def attach_measured_shot_indices(summary, points, require_all_shots=True):
     """Attach the measured shot grid index; (0, 0) is the map-shift origin, not the sampling mean."""
     keys = ["LOT_ID", "Wafer", "fcp_x", "fcp_y"]
     work = points[keys].copy()
@@ -24,8 +24,8 @@ def attach_measured_shot_indices(summary, points):
     if conflicts.any():
         raise ValueError("같은 LOT/wafer/shot 중심에 여러 DieX/DieY가 있습니다. 노광 이력 또는 좌표를 확인하세요.")
     mapping = groups[["DieX", "DieY"]].first().reset_index()
-    result = summary.merge(mapping, on=keys, how="left", validate="1:1", indicator="_shot_match")
-    if result["_shot_match"].ne("both").any() or len(result) != len(mapping):
+    result = summary.drop(columns=["DieX", "DieY", "shot_index_status"], errors="ignore").merge(mapping, on=keys, how="left", validate="1:1", indicator="_shot_match")
+    if result["_shot_match"].ne("both").any() or (require_all_shots and len(result) != len(mapping)):
         raise ValueError("Shot 통계의 key가 실측 point의 shot 목록과 다릅니다. 18번 summarize_values를 다시 실행하세요.")
     result = result.drop(columns="_shot_match")
     result["shot_index_status"] = np.where(result[["DieX", "DieY"]].notna().all(axis=1), "ok", "missing_geometry")

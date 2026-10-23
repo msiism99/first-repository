@@ -90,8 +90,9 @@ raw_preview = ["LOT_ID","Wafer","raw_x","raw_y","decorrect_valid"]
             # Prepare already-computed components to exercise the final export cell unchanged.
             definitions = ast.parse(code_after_heading(original,"## 18."))
             summary_function = next(node for node in definitions.body if isinstance(node,ast.FunctionDef) and node.name == "summarize_values")
+            index_function = next(node for node in ast.parse(code_after_heading(original,"## 20.")).body if isinstance(node,ast.FunctionDef) and node.name == "attach_measured_shot_indices")
             cells.append(nbformat.v4.new_code_cell(code_after_heading(original,"## 22.")))
-            cells.append(nbformat.v4.new_code_cell(ast.unparse(summary_function)+'''
+            cells.append(nbformat.v4.new_code_cell(ast.unparse(summary_function)+"\n\n"+ast.unparse(index_function)+'''
 pd.testing.assert_frame_equal(df_adi_raw,raw_before)
 assert len(df_final_adi) == 3
 assert not df_final_adi["decorrect_valid"].iloc[2]
@@ -100,6 +101,7 @@ SHOT_KEYS = WAFER_KEYS+["fcp_x","fcp_y"]
 df_adi_cpe,df_oco_cpe = df_final_adi.copy(),df_final_oco.copy()
 for frame in [df_adi_cpe,df_oco_cpe]:
     frame["fcp_x"],frame["fcp_y"] = 0.,0.
+    frame["DieX"],frame["DieY"] = 0,0
     for axis in ["x","y"]:
         frame[f"trocs_fit_{axis}"] = .0001
         frame[f"wk_fit_{axis}"] = .0001
@@ -112,6 +114,7 @@ cpe_options = dict(span_mode=SPAN_MODE,ridge_regression=RIDGE_REGRESSION,gopt_sp
             cells.append(nbformat.v4.new_code_cell(code_after_heading(original,"## 28.")))
             cells.append(nbformat.v4.new_code_cell('''
 assert df_decomposition_check["passed"].all()
+assert df_final_shot_adi["DieX"].eq(0).all() and df_final_shot_oco["DieY"].eq(0).all()
 assert df_decomposition_check["n_checked"].eq(2).all()
 pd.testing.assert_frame_equal(pd.read_parquet(STAGE_DIR / "15_ADI_FINAL.parquet"),df_final_adi.reset_index(drop=True))
 assert len(pd.read_excel(STAGE_DIR / "15_ADI_FINAL_sample_2.xlsx")) == 2
