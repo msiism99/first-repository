@@ -97,6 +97,8 @@ def get_data(sql):
         name = "lot_edge" if "'VC077252'" in sql else "lot_main" if "'VC077251'" in sql else "lot_adi"
     elif "apc_nautil_dat_rawdata" in sql:
         frame = pd.read_parquet(fixture_dir / "raw.parquet")
+        for col in ["value_x", "value_y"]:
+            frame[col] = pd.Categorical(frame[col].astype(str))
         match = re.search(r"r\\.lot_transn_seq IN \\(([^)]+)\\)", sql)
         return frame[frame.lot_transn_seq.isin([int(v.strip()) for v in match.group(1).split(",")])].copy()
     elif "apc_expo_overlay_lot" in sql:
@@ -178,6 +180,32 @@ class EdgeTests(unittest.TestCase):
         expo = self.data["expo"].rename(columns={"lot_id": "lotid"})
         measured = self.ns["assemble_measurements"](combined, all_lots, expo, self.data["f1"], "OCO", self.cfg)
         return combined, measured, status
+
+    def test_categorical_string_and_nullable_measurement_values(self):
+        for dtype in ["numeric_category", "string_category", "Int64", "string"]:
+            with self.subTest(dtype=dtype):
+                frame = pd.DataFrame({"lot_transn_seq": [301]*5, "data_kind": ["RAWDATA", "RAWDATA", "TESTDATA", "PERSHOT", "RAWDATA"],
+                                      "value_x": [1, -2, 3000, 1, None], "value_y": [-3, 4, -1500, 2, None]})
+                for col in ["value_x", "value_y"]:
+                    if dtype == "numeric_category":
+                        frame[col] = pd.Categorical(frame[col])
+                    elif dtype == "string_category":
+                        frame[col] = frame[col].astype("string").astype("category")
+                    else:
+                        frame[col] = frame[col].astype(dtype)
+                original = frame.copy(deep=True)
+                result = self.ns["prepare_oco_raw_source"](frame, "oco_edge", "VC077252", .6)
+                np.testing.assert_allclose(result.value_x, [.6, -1.2, 3000., 1., np.nan], equal_nan=True)
+                np.testing.assert_allclose(result.value_y, [-1.8, 2.4, -1500., 2., np.nan], equal_nan=True)
+                np.testing.assert_allclose(result.value_x_original, [1., -2., np.nan, np.nan, np.nan], equal_nan=True)
+                self.assertTrue(pd.api.types.is_float_dtype(result.value_x))
+                pd.testing.assert_frame_equal(frame, original)
+                for col in ["value_x", "value_y", "value_x_original", "value_y_original"]:
+                    result[col] = result[col].astype("category")
+                repeated = self.ns["prepare_oco_raw_source"](result, "oco_edge", "VC077252", .6)
+                np.testing.assert_allclose(repeated.value_x, [.6, -1.2, 3000., 1., np.nan], equal_nan=True)
+                changed = self.ns["prepare_oco_raw_source"](result, "oco_edge", "VC077252", .4)
+                np.testing.assert_allclose(changed.value_x, [.4, -.8, 3000., 1., np.nan], equal_nan=True)
 
     def test_batch_testdata_e2_and_baseline_adi_main_invariance(self):
         combined, measured, status = self.prepared_inputs()

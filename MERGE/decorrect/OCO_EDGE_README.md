@@ -13,6 +13,8 @@ cfg.oco_edge_scale = 0.6
 
 배율은 edge 조회 직후 `data_kind == 'RAWDATA'`인 행의 `value_x`, `value_y`에만 적용합니다. 기존 OCO, ADI, TESTDATA 좌표, PERSHOT 및 MRC 값에는 곱하지 않습니다. E1이라는 wafer edge 명칭과 GROUP의 E1은 다릅니다. 기존/edge OCO 모두 기존 E2 선택 규칙을 사용합니다.
 
+2026-10-26: DB의 value_x/value_y가 Categorical 또는 nullable 정수형이어도 배율을 적용할 수 있도록 05번 prepare_oco_raw_source에서 float 변환 후 값을 치환합니다. 지난 edge 추가본을 사용 중이면 05번 함수의 `for axis` 블록만 교체하고 05번 전체 셀부터 이후 단계를 다시 실행하면 됩니다. 원래 X/Y 보존과 중복 배율 방지는 유지합니다.
+
 ## 기존 코드를 직접 수정
 
 `OCO_Edge_Replacement_Cells.ipynb`에 교체할 코드 셀만 넣었습니다. 같은 내용의 `.py`도 제공합니다. 이 파일 자체는 독립 실행용이 아닙니다.

@@ -83,10 +83,12 @@ def prepare_oco_raw_source(raw, source_name, mstepseq, scale=1.0):
     out["measurement_scale"] = np.where(measured, float(scale), 1.0)
     for axis in ["x", "y"]:
         col, original = f"value_{axis}", f"value_{axis}_original"
+        # DB results may be categorical or nullable integer; use float before replacement.
+        current = pd.to_numeric(out[col], errors="coerce").astype(float)
         # Reusing an already-prepared frame never applies the factor a second time.
-        values = pd.to_numeric(out[original] if original in out else out[col], errors="coerce")
+        values = pd.to_numeric(out[original], errors="coerce").astype(float) if original in out else current
         out[original] = values.where(measured)
-        out[col] = out[col].where(~measured, values * scale)
+        out[col] = current.where(~measured, values * scale)
     return out
 
 
