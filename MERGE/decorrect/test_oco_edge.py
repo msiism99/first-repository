@@ -50,11 +50,11 @@ def fixtures():
     raw = []
     for mode, transn, slots in [("adi", 101, [11, 12]), ("main", 201, [11, 12]), ("edge", 301, [11, 9])]:
         shots = main_shots + edge_shots if mode == "adi" else edge_shots if mode == "edge" else main_shots
-        tests = range(1, 5) if mode == "adi" else [1, 81, 82, 83, 84]
+        tests = range(1, 5) if mode == "adi" else [1, 2, 3, 4, 81, 82, 83, 84]
         for slot in slots:
             for stamp, multiplier in [("2026-10-21 10:00", 100.), ("2026-10-21 14:00" if mode == "edge" else "2026-10-21 12:00", 1.)]:
                 for test in tests:
-                    local = test if mode == "adi" else test - 80 if test > 80 else 0
+                    local = test if mode == "adi" or test <= 80 else test - 80
                     rx = (3000. if mode == "edge" else -2000.) + 700. * local
                     ry = (-1) ** local * 1100.
                     common = dict(lot_transn_seq=transn, slot_id=slot, transn_occur_date=stamp, test_point_no=test, mrc_x_valn=.01, mrc_y_valn=.02)
@@ -65,6 +65,9 @@ def fixtures():
                         if mode == "adi":
                             raw.append(dict(common, data_kind="PERSHOT", coordinate_x=sx, coordinate_y=sy, value_x=.0001, value_y=.0002))
     raw = pd.DataFrame(raw)
+    # Same main step, but E1 and E2 were measured in separate time batches.
+    e1_late = raw.lot_transn_seq.eq(201) & raw.test_point_no.between(1,80) & raw.transn_occur_date.eq("2026-10-21 12:00")
+    raw.loc[e1_late, "transn_occur_date"] = "2026-10-21 11:00"
     expo = pd.DataFrame([dict(apc_hist_index_no=700 + slot, apc_trocs_hist_index_no=900 + slot, impala_insert_time="2026-10-21",
                              seq_no=slot, lot_id="LOT_A", slot_id=slot, photo_step_seq="VC075030", metro_step_seq="VC077251",
                              photo_date="2026-10-20", photo_transn_seq=PHOTO, mmo_mrc_ref_eqp_id="MMO") for slot in [11, 12]])
@@ -94,7 +97,7 @@ fixture_dir = Path.cwd() / "fixture"
 def get_data(sql):
     query_calls.append(sql)
     if "apc_nautil_dat_lotinfo" in sql:
-        name = "lot_edge" if "'VC077252'" in sql else "lot_main" if "'VC077251'" in sql else "lot_adi"
+        name = "lot_edge" if "'VC077252'" in sql else "lot_adi" if "'VC075040'" in sql else "lot_main"
     elif "apc_nautil_dat_rawdata" in sql:
         frame = pd.read_parquet(fixture_dir / "raw.parquet")
         for col in ["value_x", "value_y"]:
@@ -168,15 +171,15 @@ class EdgeTests(unittest.TestCase):
         for bad in [np.nan, np.inf, -.1]:
             with self.assertRaises(ValueError):
                 self.ns["PipelineConfig"](oco_edge_scale=bad)
-        with self.assertRaises(ValueError):
-            self.ns["PipelineConfig"](target_mstepseq_oco_edge="VC077251")
+        self.assertEqual(self.ns["PipelineConfig"](target_mstepseq_oco_edge="VC077251").target_mstepseq_oco_edge, "VC077251")
 
     def prepared_inputs(self):
         edge, status = self.ns["select_oco_edge_history"](self.data["lot_edge"], self.data["lot_main"])
         all_lots = pd.concat([self.data["lot_main"], edge], ignore_index=True)
         base = self.ns["prepare_oco_raw_source"](self.data["raw"].query("lot_transn_seq == 201"), "oco_main", "VC077251")
         extra = self.ns["prepare_oco_raw_source"](self.data["raw"].query("lot_transn_seq == 301"), "oco_edge", "VC077252", .6)
-        combined = self.ns["latest_raw_batch"](pd.concat([base, extra], ignore_index=True), all_lots)
+        extra = extra[extra.test_point_no.between(81, 160)]
+        combined = self.ns["latest_raw_batch"](pd.concat([base, extra], ignore_index=True), all_lots, separate_test_groups=True)
         expo = self.data["expo"].rename(columns={"lot_id": "lotid"})
         measured = self.ns["assemble_measurements"](combined, all_lots, expo, self.data["f1"], "OCO", self.cfg)
         return combined, measured, status
@@ -210,8 +213,9 @@ class EdgeTests(unittest.TestCase):
     def test_batch_testdata_e2_and_baseline_adi_main_invariance(self):
         combined, measured, status = self.prepared_inputs()
         self.assertEqual(set(measured.Wafer), {11, 12})
-        self.assertEqual(len(measured), 52)
-        self.assertTrue(measured.GROUP.eq("E2").all())
+        self.assertEqual(len(measured), 100)
+        self.assertEqual(measured.is_oco_analysis.sum(), 52)
+        self.assertEqual(measured.is_kmrc_reference.sum(), 48)
         edge = measured[measured.measurement_source.eq("oco_edge")]
         self.assertEqual(len(edge), 4)
         self.assertEqual(set(edge.coordinate_X), {3700., 4400., 5100., 5800.})
@@ -231,18 +235,20 @@ class EdgeTests(unittest.TestCase):
             expected = old_ns["assemble_measurements"](raw, self.data[lots], expo, self.data["f1"], mode, self.cfg)
             actual_raw = self.ns["prepare_oco_raw_source"](raw, "oco_main", "VC077251") if mode == "OCO" else raw
             actual = self.ns["assemble_measurements"](actual_raw, self.data[lots], expo, self.data["f1"], mode, self.cfg)
+            if mode == "OCO":
+                actual = actual[actual.is_oco_analysis].reset_index(drop=True)
             pd.testing.assert_frame_equal(expected, actual[expected.columns])
 
     def test_only_replacement_cells_changed_and_patch_is_exact(self):
         old = json.loads(subprocess.check_output(["git", "show", "50dcf60:MERGE/MRC_PSM_decorrect.ipynb"], cwd=HERE))
         old_by_id = {c["id"]: c for c in old["cells"]}
         changed = [c["id"] for c in self.doc["cells"] if c["cell_type"] == "code" and c["source"] != old_by_id[c["id"]]["source"]]
-        patch_doc = nbformat.read(HERE / "OCO_Edge_Replacement_Cells.ipynb", as_version=4)
-        self.assertEqual(len(changed), 5)
+        patch_doc = nbformat.read(HERE / "KMRC_Replacement_Cells.ipynb", as_version=4)
+        self.assertEqual(len(changed), 9)
         for c in patch_doc.cells:
             if c.cell_type == "code":
                 self.assertIn(c.source, [s["source"] for s in self.doc["cells"] if s["cell_type"] == "code"])
-        for path in [MAIN, HERE / "OCO_Edge_Replacement_Cells.ipynb"]:
+        for path in [MAIN, HERE / "KMRC_Replacement_Cells.ipynb"]:
             notebook = nbformat.read(path, as_version=4)
             nbformat.validate(notebook)
             for c in notebook.cells:
@@ -262,6 +268,7 @@ class EdgeTests(unittest.TestCase):
             notebook.cells = notebook.cells[:stop]
             settings = next(c for c in notebook.cells if c.cell_type == "code" and "class PipelineConfig:" in c.source)
             settings.source = settings.source.replace("cfg.reference_date = None", 'cfg.reference_date = "2026-10-23"').replace("EXCEL_PREVIEW_ROWS = 10000", "EXCEL_PREVIEW_ROWS = 500").replace("PREVIEW_ROWS = 10", "PREVIEW_ROWS = 2")
+            settings.source += "\ncfg.oco_edge_scale = .6\n"
             mock_index = notebook.cells.index(settings) + 1
             notebook.cells.insert(mock_index, nbformat.v4.new_code_cell(MOCK_DB))
             notebook.cells.append(nbformat.v4.new_code_cell('''
@@ -269,6 +276,7 @@ assert len(df_final_oco) == 52 and set(df_final_oco.Wafer) == {11,12}
 assert len(df_final_adi) == 56
 edge = df_final_oco[df_final_oco.measurement_source.eq("oco_edge")]
 assert len(edge) == 4 and edge.GROUP.eq("E2").all()
+assert len(df_oco_e1_raw) == 48 and df_oco_e1_raw.measurement_source.eq("oco_main").all()
 np.testing.assert_allclose(edge.X_reg, edge.X_reg_original * .6)
 np.testing.assert_allclose(edge.Y_reg, edge.Y_reg_original * .6)
 np.testing.assert_allclose(edge.raw_x, edge.X_reg_original * .6 + .0004 - .0001)
@@ -294,7 +302,7 @@ cfg.include_oco_edge = False
                 notebook.cells.append(nbformat.v4.new_code_cell(section(self.doc, num)))
             notebook.cells.append(nbformat.v4.new_code_cell('''
 assert not any("'VC077252'" in sql for sql in query_calls[calls_before:])
-assert len(df_oco_measured) == 48 and df_oco_measured.measurement_scale.eq(1.).all()
+assert len(df_oco_measured) == 96 and df_oco_measured.measurement_scale.eq(1.).all()
 pd.testing.assert_frame_equal(df_oco_measured.reset_index(drop=True), main_saved)
 assert df_oco_edge_coverage.edge_point_status.eq("disabled").all()
 print("OCO edge: full pipeline and disabled-mode checks passed")

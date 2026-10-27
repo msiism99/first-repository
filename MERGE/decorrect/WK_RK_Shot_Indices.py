@@ -1,6 +1,16 @@
 def attach_measured_shot_indices(summary, points, require_all_shots=True):
     """Attach the measured shot grid index; (0, 0) is the map-shift origin, not the sampling mean."""
     keys = ["LOT_ID", "Wafer", "fcp_x", "fcp_y"]
+    if summary.empty:
+        if require_all_shots and not points.empty:
+            raise ValueError("실측 shot이 있는데 shot 통계가 비어 있습니다.")
+        result = summary.drop(columns=["DieX", "DieY", "shot_index_status"], errors="ignore").copy()
+        for key in keys:
+            result[key] = points[key].iloc[:0].reset_index(drop=True)
+        result["DieX"], result["DieY"] = pd.Series(dtype="Int64"), pd.Series(dtype="Int64")
+        result["shot_index_status"] = pd.Series(dtype="object")
+        first = ["LOT_ID", "Wafer", "DieX", "DieY", "fcp_x", "fcp_y", "shot_index_status"]
+        return result[first + [col for col in summary.columns if col not in first]]
     work = points[keys].copy()
     for axis, die in [("x", "DieX"), ("y", "DieY")]:
         values = pd.to_numeric(points[die], errors="coerce").astype(float) if die in points else pd.Series(np.nan, index=points.index)

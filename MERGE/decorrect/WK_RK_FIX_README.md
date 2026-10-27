@@ -1,5 +1,7 @@
 # WK/RK wafer·shot 집계 수정
 
+2026-10-27: 현재 번들의 본 노트북과 독립 재계산 노트북은 새 K-MRC 흐름을 사용합니다. OCO는 E1−ADI 계수 차이를 제거하며, 독립 재계산에도 `15_OCO_E1_KMRC_INPUT` 전체 자료가 추가로 필요합니다. 이전 E2-only 자료에는 이 기준 자료가 없으므로 새 본 노트북을 처음부터 실행해야 합니다. K-MRC 계산 불가 wafer는 이후 OCO 분석에서 제외합니다. 새 전체 패키지는 `MRC_PSM_KMRC_Package.zip`입니다.
+
 `MRC_PSM_decorrect.ipynb`를 `C:\PHOTO_ANALYSIS\BASIC`의 기존 파일과 교체합니다. 00번의 개인 조회 설정은 기존 파일에서 옮기세요.
 
 ## 이미 저장된 자료로 21번 결과만 다시 만들기

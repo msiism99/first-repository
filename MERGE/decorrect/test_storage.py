@@ -83,6 +83,8 @@ pd.testing.assert_frame_equal(pd.read_parquet(STAGE_DIR / "05_RAWDATA_ADI_QUERY.
 assert len(pd.read_excel(STAGE_DIR / "05_RAWDATA_ADI_QUERY_sample_2.xlsx")) == 2
 df_adi_raw = pd.DataFrame({"LOT_ID":["LOT_A"]*5,"Wafer":[9]*5,"raw_x":[.001,.002,np.nan,.004,.005],"raw_y":[.002,.003,np.nan,.005,.006],"decorrect_valid":[True,True,False,True,True],"mrc_status":["matched"]*5,"psm_fit_status":["matched"]*5,"MMO_MRC_EQP":["EQP","EQP","EQP",None,""]})
 df_oco_raw = df_adi_raw.copy(deep=True)
+df_oco_raw["GROUP"] = "E2"
+df_oco_raw["measurement_source"] = "oco_main"
 raw_before = df_adi_raw.copy(deep=True)
 raw_preview = ["LOT_ID","Wafer","raw_x","raw_y","decorrect_valid"]
 '''))

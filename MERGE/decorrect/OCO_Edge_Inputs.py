@@ -48,8 +48,9 @@ def select_oco_edge_history(edge, selected):
     return edge, matched
 
 
+OCO_SPLIT_STEPS = bool(cfg.include_oco_edge and cfg.target_mstepseq_oco_edge != cfg.target_mstepseq_oco)
 edge_query_parts = []
-if cfg.include_oco_edge and not df_lotinfo_oco.empty:
+if OCO_SPLIT_STEPS and not df_lotinfo_oco.empty:
     edge_photos = df_lotinfo_oco["photo_transn_seq"].dropna().unique().tolist()
     for offset in range(0, len(edge_photos), cfg.max_query_keys):
         subset = df_lotinfo_oco[df_lotinfo_oco["photo_transn_seq"].isin(edge_photos[offset:offset + cfg.max_query_keys])]
@@ -57,8 +58,8 @@ if cfg.include_oco_edge and not df_lotinfo_oco.empty:
         edge_query_parts.append(fetch_frame(f"lotinfo_oco_edge_{offset // cfg.max_query_keys}", sql_lotinfo_oco_edge))
 df_lotinfo_oco_edge_query = pd.concat(edge_query_parts, ignore_index=True) if edge_query_parts else df_lotinfo_oco.iloc[:0].copy()
 df_lotinfo_oco_edge, df_oco_edge_history_status = select_oco_edge_history(df_lotinfo_oco_edge_query, df_lotinfo_oco)
-if not cfg.include_oco_edge:
-    df_oco_edge_history_status["edge_history_status"] = "disabled"
+if not OCO_SPLIT_STEPS:
+    df_oco_edge_history_status["edge_history_status"] = "single_step" if cfg.include_oco_edge else "disabled"
 oco_history_parts = [frame for frame in [df_lotinfo_oco, df_lotinfo_oco_edge] if not frame.empty]
 df_lotinfo_oco_all = pd.concat(oco_history_parts, ignore_index=True) if oco_history_parts else df_lotinfo_oco_edge.copy()
 if df_lotinfo_oco_all.duplicated(["lot_transn_seq", "slotid"]).any():
@@ -94,10 +95,14 @@ def prepare_oco_raw_source(raw, source_name, mstepseq, scale=1.0):
 
 sql_rawdata_oco = rawdata_sql(cfg, df_lotinfo_oco) if not df_lotinfo_oco.empty else None
 sql_rawdata_adi = rawdata_sql(cfg, df_lotinfo_adi) if not df_lotinfo_adi.empty else None
-sql_rawdata_oco_edge = rawdata_sql(cfg, df_lotinfo_oco_edge) if not df_lotinfo_oco_edge.empty else None
+edge_analysis_group = "E2" if (cfg.target_mstepseq_oco or "")[2:5] == "077" else "E1"
+sql_rawdata_oco_edge = rawdata_sql(cfg, df_lotinfo_oco_edge, test_group=edge_analysis_group) if not df_lotinfo_oco_edge.empty else None
 df_rawdata_oco_main_query = fetch_frame("rawdata_oco", sql_rawdata_oco, reuse=False) if sql_rawdata_oco else pd.DataFrame()
 df_rawdata_oco_main_query = prepare_oco_raw_source(df_rawdata_oco_main_query, "oco_main", cfg.target_mstepseq_oco)
 df_rawdata_oco_edge_query = fetch_frame("rawdata_oco_edge", sql_rawdata_oco_edge, reuse=False) if sql_rawdata_oco_edge else pd.DataFrame()
+if not df_rawdata_oco_edge_query.empty:
+    lower, upper = (81, 160) if edge_analysis_group == "E2" else (1, 80)
+    df_rawdata_oco_edge_query = df_rawdata_oco_edge_query[pd.to_numeric(df_rawdata_oco_edge_query["test_point_no"], errors="coerce").between(lower, upper)].copy()
 df_rawdata_oco_edge_query = prepare_oco_raw_source(df_rawdata_oco_edge_query, "oco_edge", cfg.target_mstepseq_oco_edge, cfg.oco_edge_scale)
 oco_raw_parts = [frame for frame in [df_rawdata_oco_main_query, df_rawdata_oco_edge_query] if not frame.empty]
 df_rawdata_oco_query = pd.concat(oco_raw_parts, ignore_index=True) if oco_raw_parts else df_rawdata_oco_main_query.copy()
@@ -112,7 +117,8 @@ def oco_edge_coverage(measured, history_status):
     keys = ["LOT_ID", "Wafer", "photo_transn_seq"]
     result = history_status.rename(columns={"lotid": "LOT_ID", "slotid": "Wafer"}).copy()
     for source_name, count_col in [("oco_main", "n_main_points"), ("oco_edge", "n_edge_points")]:
-        subset = measured[measured["measurement_source"].eq(source_name)]
+        analysis = measured["is_oco_analysis"] if "is_oco_analysis" in measured else pd.Series(True, index=measured.index)
+        subset = measured[analysis & measured["measurement_source"].eq(source_name)]
         counts = subset.groupby(keys, observed=True, dropna=False).size().rename(count_col).reset_index()
         result = result.merge(counts, on=keys, how="left", validate="1:1")
         result[count_col] = result[count_col].fillna(0).astype(int)

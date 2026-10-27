@@ -18,7 +18,18 @@ def code_at(number):
 # Only grouping semantics change; neither the selected rows nor the fitted matrices change.
 for number in [15, 18, 20, 21, 26]:
     cell = code_at(number)
-    cell["source"] = cell["source"].replace("dropna=False)", "dropna=False, observed=True)")
+    source = cell["source"]
+    lines = source.splitlines(keepends=True)
+    offsets = [0]
+    for line in lines:
+        offsets.append(offsets[-1] + len(line))
+    edits = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "groupby" and not any(k.arg == "observed" for k in node.keywords):
+            edits.append(offsets[node.end_lineno - 1] + node.end_col_offset - 1)
+    for index in sorted(edits, reverse=True):
+        source = source[:index] + ", observed=True" + source[index:]
+    cell["source"] = source
 
 helper = (HERE / "WK_RK_Shot_Indices.py").read_text(encoding="utf-8")
 cell20 = code_at(20)
@@ -111,6 +122,7 @@ def save_stage(name, frame, columns=None):
 '''
 loads = '''df_adi_trocs = read_full_stage("19_ADI_TROCS_ATTACHED")
 df_oco_trocs = read_full_stage("19_OCO_TROCS_ATTACHED")
+df_oco_e1_raw = read_full_stage("15_OCO_E1_KMRC_INPUT")
 '''
 keys = code_at(18)["source"].split("\ndef summarize_values")[0]
 common = next(cell["source"] for cell in document["cells"] if cell["cell_type"] == "code" and "def numeric(" in cell["source"])
@@ -118,17 +130,19 @@ helpers = keys + "\n" + definitions(common, {"numeric"}) + definitions(code_at(1
 audit = '''def wafer_counts(frame):
     return frame.groupby(WAFER_KEYS, observed=True, dropna=False).size().rename("n_measured_points").reset_index()
 
-for mode, source, wafer, shot in [("ADI", df_adi_trocs, df_wk_rk_wafer_adi, df_wk_rk_shot_adi), ("OCO", df_oco_trocs, df_wk_rk_wafer_oco, df_wk_rk_shot_oco)]:
-    measured = wafer_counts(source)
-    check = measured.merge(wafer[WAFER_KEYS + ["n_points"]], on=WAFER_KEYS, how="outer", validate="1:1", indicator=True)
+for mode, input_frame, reg, wafer, shot in [("ADI", df_adi_trocs, df_adi_reg, df_wk_rk_wafer_adi, df_wk_rk_shot_adi), ("OCO", df_oco_trocs, df_oco_reg, df_wk_rk_wafer_oco, df_wk_rk_shot_oco)]:
+    measured, analyzed = wafer_counts(input_frame), wafer_counts(reg)
+    check = analyzed.merge(wafer[WAFER_KEYS + ["n_points"]], on=WAFER_KEYS, how="outer", validate="1:1", indicator=True)
     assert check["_merge"].eq("both").all() and check["n_measured_points"].eq(check["n_points"]).all()
-    assert shot["n_points"].gt(0).all() and shot["n_points"].sum() == len(source)
+    assert shot["n_points"].gt(0).all() and shot["n_points"].sum() == len(reg)
     selected_name = f"04_LOTINFO_{mode}_SELECTED"
     if any((STAGE_DIR / (selected_name + ext)).is_file() for ext in [".parquet", ".xlsx"]):
         selected = read_full_stage(selected_name).rename(columns={"lotid": "LOT_ID", "slotid": "Wafer"})
         selected = selected[WAFER_KEYS].drop_duplicates()
         scope = selected.merge(measured, on=WAFER_KEYS, how="outer", validate="1:1", indicator=True)
         scope["scope_status"] = scope.pop("_merge").astype(str).map({"both": "selected_and_measured", "left_only": "selected_without_stage19_points", "right_only": "stage19_not_in_selected"})
+        scope = scope.merge(analyzed.rename(columns={"n_measured_points": "n_analyzed_points"}), on=WAFER_KEYS, how="left", validate="1:1")
+        scope["n_analyzed_points"] = scope["n_analyzed_points"].fillna(0).astype(int)
         save_stage(f"21_{mode}_WK_RK_WAFER_SCOPE", scope)
         if scope["scope_status"].eq("stage19_not_in_selected").any():
             print(f"{mode}: 04와 19의 실행 대상이 다릅니다. 저장 파일이 같은 실행 자료인지 확인하세요.")
