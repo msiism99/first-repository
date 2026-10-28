@@ -8,7 +8,7 @@ def es_metric_table(frame, keys, scale):
             result = skeleton.copy()
             if not part.empty:
                 work = part[keys].copy()
-                values = pd.to_numeric(part[f"real_residual_{axis}"], errors="coerce") * 1000
+                values = pd.to_numeric(part[f"metric_residual_{axis}"], errors="coerce") * 1000
                 work["_value"] = values.where(np.isfinite(values))
                 groups = work.groupby(keys, observed=True, dropna=False)
                 stats = groups["_value"].agg(n_region_points="size", n_valid="count", mean_nm="mean")
@@ -22,6 +22,7 @@ def es_metric_table(frame, keys, scale):
             result["M3S_nm"] = result["abs_mean_nm"] + result["three_sigma_nm"]
             result["metric_status"] = np.where(result.n_valid.eq(0), "no_valid_points", np.where(result.n_valid.le(ES_STD_DDOF), "too_few_points", "ok"))
             result["scale"], result["scale_pct"], result["axis"], result["region"] = scale, int(round(scale * 100)), axis, region
+            result["metric_basis"] = "UNSCALED_MEASUREMENT"
             results.append(result)
     return pd.concat(results, ignore_index=True)
 
@@ -38,6 +39,21 @@ def es_scaled_input(base, scale):
                 out[col] = pd.to_numeric(out[col], errors="coerce") + delta
     out.loc[outer, "measurement_scale"] = scale
     out["edge_sweep_scale"] = scale
+    return out
+
+
+def es_evaluate_original_measurement(fitted):
+    """PSM은 배율 적용 입력으로 추정하고, 평가는 배율 적용 전 입력에서 같은 PSM을 뺀다."""
+    out = fitted.copy()
+    outer = out["_es_outer"]
+    for axis in ["x", "y"]:
+        restore = pd.Series(0., index=out.index)
+        original = pd.to_numeric(out.loc[outer, f"{axis.upper()}_reg_original"], errors="coerce")
+        scale = pd.to_numeric(out.loc[outer, "measurement_scale"], errors="coerce")
+        restore.loc[outer] = (1. - scale) * original
+        # 기존 MRC/PSM decorrection 및 K-MRC는 유지하고 측정값 배율만 100%로 복원한다.
+        out[f"metric_input_{axis}"] = pd.to_numeric(out[f"raw_minus_total_fit_{axis}"], errors="coerce") + restore
+        out[f"metric_residual_{axis}"] = out[f"metric_input_{axis}"] - pd.to_numeric(out[f"CPE_fit_{axis}"], errors="coerce")
     return out
 
 
@@ -64,20 +80,23 @@ if not es_affected_base.empty and es_matched_scale is None:
     es_parity_rows.append(es_assert_baseline(baseline_fit, es_affected_base))
 for scale in ES_SCALES:
     full = es_base_points[ES_SHOT_KEYS + ["radius", "_es_affected", "real_residual_x", "real_residual_y"]].copy()
+    # 영향 없는 shot은 외곽 point가 없으므로 기존 residual이 곧 배율 적용 전 평가값이다.
+    full = full.rename(columns={f"real_residual_{axis}": f"metric_residual_{axis}" for axis in ["x", "y"]})
     if not es_affected_base.empty:
         changed = es_scaled_input(es_affected_base, scale)
         fitted, coeff, diagnostic = es_run_cpe38_vba_style_shotwise(changed, label=f"OCO_EDGE_{scale:.0%}", **ES_CPE_OPTIONS)
         if es_matched_scale is not None and np.isclose(scale, es_matched_scale, rtol=0, atol=1e-12):
             es_parity_rows.append(es_assert_baseline(fitted, es_affected_base))
+        fitted = es_evaluate_original_measurement(fitted)
         # Replace complete affected shots, including their inner points; unchanged shots reuse 27's results.
-        for col in ["real_residual_x", "real_residual_y"]:
+        for col in ["metric_residual_x", "metric_residual_y"]:
             full.loc[fitted.index, col] = fitted[col].to_numpy()
         for table, store in [(coeff, es_coefficients), (diagnostic, es_diagnostics)]:
             table = table.reindex(columns=list(dict.fromkeys(ES_SHOT_KEYS + list(table.columns))))
             table["scale"], table["scale_pct"] = scale, int(round(scale*100))
             store.append(table)
         if ES_SAVE_AFFECTED_POINTS:
-            selected = ES_SHOT_KEYS + [col for col in ["photo_transn_seq", "DieX", "DieY", "TEST", "GROUP", "coordinate_X", "coordinate_Y", "radius", "measurement_source", "measurement_scale", "X_reg_original", "Y_reg_original", "raw_x", "raw_y", "wk_fit_x", "wk_fit_y", "rk_fit_x", "rk_fit_y", "total_fit_x", "total_fit_y", "raw_minus_total_fit_x", "raw_minus_total_fit_y", "CPE_fit_x", "CPE_fit_y", "real_residual_x", "real_residual_y"] if col in fitted]
+            selected = ES_SHOT_KEYS + [col for col in ["photo_transn_seq", "DieX", "DieY", "TEST", "GROUP", "coordinate_X", "coordinate_Y", "radius", "measurement_source", "measurement_scale", "X_reg_original", "Y_reg_original", "raw_x", "raw_y", "wk_fit_x", "wk_fit_y", "rk_fit_x", "rk_fit_y", "total_fit_x", "total_fit_y", "raw_minus_total_fit_x", "raw_minus_total_fit_y", "CPE_fit_x", "CPE_fit_y", "real_residual_x", "real_residual_y", "metric_input_x", "metric_input_y", "metric_residual_x", "metric_residual_y"] if col in fitted]
             fitted[selected].to_parquet(ES_OUTPUT_DIR / "points" / f"Affected_points_scale_{int(round(scale*100)):03d}.parquet", index=False)
     wafer = es_metric_table(full, ES_WAFER_KEYS, scale)
     wafer = wafer.merge(es_wafer_index, on=ES_WAFER_KEYS, how="left", validate="m:1")

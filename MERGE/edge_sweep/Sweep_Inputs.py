@@ -12,7 +12,7 @@ from IPython.display import display, FileLink
 ES_BASE_DIR = Path.cwd()  # C:\PHOTO_ANALYSIS\BASIC에 노트북 배치
 ES_INPUT_DIR = ES_BASE_DIR / "output_decorrect_notebook"
 ES_OUTPUT_DIR = ES_BASE_DIR / "output_oco_edge_scale_sweep"
-ES_SCALES = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+ES_SCALES = [i / 10 for i in range(1, 11)]  # 10~100%, 10% 간격
 ES_RADIUS_UM = 144000.0
 ES_METRIC_AXES = ["x", "y"]  # X만 보고 싶으면 ["x"]
 ES_STD_DDOF = 1  # 표본 표준편차. M3S = abs(mean) + 3*std
@@ -100,5 +100,5 @@ else:
     for col in ["DieX", "DieY", "n_points", "n_outer_points", "n_outer_fit_points"]:
         es_shot_index[col] = pd.Series(dtype="Int64")
 print(f"OCO wafer {len(es_wafer_index):,}, 전체 shot {len(es_base_points[ES_SHOT_KEYS].drop_duplicates()):,}, 재계산 shot {len(es_shot_index):,}")
-print("K-MRC 고정. 반경 >144mm point만 배율 변경; 영향 shot의 전체 point로 CPE 회귀; M3S는 두 영역으로 계산.")
+print("K-MRC 고정. 반경 >144mm point의 배율은 CPE 회귀에만 적용; M3S는 배율 적용 전 측정값에서 새 CPE를 뺀 값으로 두 영역 집계.")
 display(es_shot_index.head(10))

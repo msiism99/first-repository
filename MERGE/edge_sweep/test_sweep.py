@@ -93,7 +93,8 @@ class SweepTests(unittest.TestCase):
     def test_abs_mean_sample_sigma_boundary_and_empty_inner(self):
         ns = self.namespace()
         frame = pd.DataFrame({"LOT_ID": ["A"]*4, "Wafer": [11]*4, "radius": [144000.,143000.,145000.,146000.],
-                              "real_residual_x": [-.001,-.003,.002,.004], "real_residual_y": [.001,.003,-.002,-.004]})
+                              "metric_residual_x": [-.001,-.003,.002,.004], "metric_residual_y": [.001,.003,-.002,-.004],
+                              "real_residual_x": [9.]*4, "real_residual_y": [9.]*4})
         metrics = ns["es_metric_table"](frame, ["LOT_ID", "Wafer"], .5)
         x = metrics[metrics.axis.eq("x")]
         inner = x[x.region.eq("R_LE_144MM")].iloc[0]
@@ -112,7 +113,7 @@ class SweepTests(unittest.TestCase):
         ns = self.namespace()
         base = ns["es_prepare_points"](self.base)
         original = base.copy(deep=True)
-        for scale in [.5,.6,.7,.8,.9,1.]:
+        for scale in [i/10 for i in range(1,11)]:
             changed = ns["es_scaled_input"](base, scale)
             for axis in ["x","y"]:
                 target_reg = np.where(base._es_outer, scale*base[f"{axis.upper()}_reg_original"], base[f"{axis.upper()}_reg"])
@@ -126,7 +127,31 @@ class SweepTests(unittest.TestCase):
             for col in ["real_residual_x","real_residual_y"]:
                 combined.loc[affected.index,col] = affected[col]
                 np.testing.assert_allclose(combined[col], full[col], rtol=0, atol=1e-15, equal_nan=True)
+            evaluated = ns["es_evaluate_original_measurement"](affected)
+            for axis in ["x","y"]:
+                rows = base.loc[affected.index]
+                # Independent physical target: original DB measurement minus fixed corrections and the new CPE.
+                unscaled = rows[f"{axis.upper()}_reg_original"] - rows[f"mrc_fit_{axis}"] - rows[f"psm_fit_{axis}"] - rows[f"total_fit_{axis}"]
+                np.testing.assert_allclose(evaluated[f"metric_input_{axis}"],unscaled,rtol=0,atol=1e-17)
+                np.testing.assert_allclose(evaluated[f"metric_residual_{axis}"],unscaled-affected[f"CPE_fit_{axis}"],rtol=0,atol=1e-17,equal_nan=True)
+                inner = ~affected._es_outer
+                np.testing.assert_array_equal(evaluated.loc[inner,f"metric_residual_{axis}"],affected.loc[inner,f"real_residual_{axis}"])
+                if scale == 1.:
+                    np.testing.assert_array_equal(evaluated[f"metric_residual_{axis}"],affected[f"real_residual_{axis}"])
+                else:
+                    self.assertGreater(np.nanmax(np.abs(evaluated[f"metric_residual_{axis}"]-affected[f"real_residual_{axis}"])),1e-6)
         pd.testing.assert_frame_equal(base, original)
+
+    def test_known_original_measurement_is_restored_without_scaling_cpe(self):
+        ns = self.namespace()
+        frame = pd.DataFrame({"_es_outer":[True,False],"measurement_scale":[.5,1.],"X_reg_original":[.010,.010],"Y_reg_original":[-.010,-.010],
+                              "raw_minus_total_fit_x":[.0035,.0085],"raw_minus_total_fit_y":[-.0035,-.0085],
+                              "CPE_fit_x":[.003,.003],"CPE_fit_y":[-.003,-.003]},index=[4,9])
+        evaluated = ns["es_evaluate_original_measurement"](frame)
+        np.testing.assert_allclose(evaluated.metric_residual_x,[.0055,.0055],rtol=0,atol=1e-18)
+        np.testing.assert_allclose(evaluated.metric_residual_y,[-.0055,-.0055],rtol=0,atol=1e-18)
+        pd.testing.assert_series_equal(evaluated.CPE_fit_x,frame.CPE_fit_x)
+        pd.testing.assert_series_equal(evaluated.CPE_fit_y,frame.CPE_fit_y)
 
     def test_baseline_mismatch_stops_and_full_excel_fallback_ignores_samples(self):
         ns = self.namespace()
@@ -173,11 +198,13 @@ es_run_cpe38_vba_style_shotwise = es_spy
             notebook.cells.append(nbformat.v4.new_code_cell('''
 assert es_baseline_parity.passed.all()
 assert all(set(call.fcp_x).issubset({140000.,145000.}) for call in es_calls)
-assert len(es_calls) == (6 if len(es_shot_index) else 0)
+assert ES_SCALES == [i/10 for i in range(1,11)]
+assert len(es_calls) == (len(ES_SCALES) if len(es_shot_index) else 0)
 assert ES_RIDGE_VALVE_HYPER["RK7"] == .7
 assert ES_SPAN_TOLERANCE == .012
 assert (ES_OUTPUT_DIR / "OCO_Edge_Scale_Sweep.xlsx").is_file()
-assert len(es_wafer_metrics) == len(es_wafer_index)*6*2*2
+assert len(es_wafer_metrics) == len(es_wafer_index)*len(ES_SCALES)*2*2
+assert es_wafer_metrics.metric_basis.eq("UNSCALED_MEASUREMENT").all()
 if len(es_shot_index):
     assert len(es_shot_index) == 2
     assert es_shot_metrics.loc[es_shot_metrics.fcp_x.eq(145000.) & es_shot_metrics.region.eq("R_LE_144MM"), "M3S_nm"].isna().all()
@@ -185,7 +212,28 @@ if len(es_shot_index):
     assert mixed.M3S_nm.max()-mixed.M3S_nm.min() > 1e-7
     unchanged = es_wafer_metrics[es_wafer_metrics.LOT_ID.eq("B")]
     assert unchanged.groupby(["axis","region"]).M3S_nm.nunique().eq(1).all()
-    assert len(list((ES_OUTPUT_DIR/"points").glob("*.parquet"))) == 6
+    assert len(list((ES_OUTPUT_DIR/"points").glob("*.parquet"))) == len(ES_SCALES)
+    for scale in ES_SCALES:
+        saved = pd.read_parquet(ES_OUTPUT_DIR/"points"/f"Affected_points_scale_{int(round(scale*100)):03d}.parquet")
+        baseline = es_affected_base.reset_index(drop=True)
+        outer = saved.radius.gt(ES_RADIUS_UM)
+        for axis in ["x","y"]:
+            unscaled_input = baseline[f"raw_minus_total_fit_{axis}"].copy()
+            unscaled_input.loc[outer] += (1.-baseline.loc[outer,"measurement_scale"])*baseline.loc[outer,f"{axis.upper()}_reg_original"]
+            expected = unscaled_input-saved[f"CPE_fit_{axis}"]
+            np.testing.assert_allclose(saved[f"metric_residual_{axis}"],expected,rtol=0,atol=1e-17,equal_nan=True)
+            for region,mask in [("R_LE_144MM",~outer),("ALL_POINTS",pd.Series(True,index=saved.index))]:
+                for key,rows in saved.loc[mask].groupby(ES_SHOT_KEYS,observed=True):
+                    values=expected.loc[rows.index]*1000
+                    direct=abs(values.mean())+3*values.std(ddof=ES_STD_DDOF)
+                    selected=es_shot_metrics.axis.eq(axis)&es_shot_metrics.region.eq(region)&es_shot_metrics.scale.eq(scale)
+                    for col,value in zip(ES_SHOT_KEYS,key):
+                        selected &= es_shot_metrics[col].eq(value)
+                    assert np.isclose(es_shot_metrics.loc[selected,"M3S_nm"].iloc[0],direct,rtol=0,atol=1e-12,equal_nan=True)
+        if scale == 1.:
+            np.testing.assert_array_equal(saved.metric_residual_x,saved.real_residual_x)
+        else:
+            assert (saved.loc[outer,"metric_residual_x"]-saved.loc[outer,"real_residual_x"]).abs().max()>1e-6
 else:
     assert es_shot_metrics.empty
     assert es_wafer_metrics.groupby(["LOT_ID","Wafer","axis","region"]).M3S_nm.nunique().eq(1).all()

@@ -62,7 +62,7 @@ for number, source in sources.items():
     assert len(source.splitlines()) < 1000
     cells.append(dict(cell_type="markdown", id=f"edge-sweep-heading-{number}", metadata={}, source=f"## {number}. {titles[number]}\n"))
     cells.append(dict(cell_type="code", id=f"edge-sweep-{number}", metadata={}, source=source.rstrip()+"\n", execution_count=None, outputs=[]))
-intro = dict(cell_type="markdown", id="edge-sweep-intro", metadata={}, source="# OCO 외곽 배율 비교: 29~34번\n28번까지 저장한 OCO 결과를 읽어 K-MRC를 고정하고, 144mm 바깥 point가 있는 shot만 CPE를 재계산합니다. DB 조회·기존 29번 context 코드는 실행하지 않습니다. 이 파일만 새 커널에서 29~34번 순서대로 실행하거나 기존 28번 뒤에 복사하세요.\n")
+intro = dict(cell_type="markdown", id="edge-sweep-intro", metadata={}, source="# OCO 외곽 배율 비교: 29~34번\n28번까지 저장한 OCO 결과를 읽어 K-MRC를 고정하고, 144mm 바깥 point가 있는 shot만 CPE를 재계산합니다. 기본 10~100%의 10개 배율은 PSM 추정에만 적용하며, M3S는 배율 적용 전 측정값에서 고정 보정 및 새 PSM을 뺀 metric_residual로 계산합니다. DB 조회·기존 29번 context 코드는 실행하지 않습니다. 이 파일만 새 커널에서 29~34번 순서대로 실행하거나 기존 28번 뒤에 복사하세요.\n")
 standalone = dict(nbformat=4, nbformat_minor=5, metadata=document["metadata"], cells=[intro]+cells)
 append_path = HERE / "OCO_Edge_Sweep_29_34.ipynb"
 append_path.write_text(json.dumps(standalone, ensure_ascii=False, indent=1)+"\n", encoding="utf-8")
