@@ -1,6 +1,8 @@
 # OCO 제품별 edge / 안쪽 비교
 
-`OCO_Edge_Inner_Comparison.ipynb`를 `C:\PHOTO_ANALYSIS\BASIC`에 놓고 00→07번을 실행합니다. 기존 `MRC_PSM_decorrect.ipynb` 뒤에 붙일 필요가 없는 독립 노트북입니다. 기존 코드/입력 파일을 변경하지 않고 DB도 조회하지 않습니다. Notebook 내부에 기존 CPE38 수치 solver를 포함했으므로 별도 `.py` 파일은 필요 없습니다.
+`OCO_Edge_Inner_Comparison.ipynb`를 BASIC 폴더에 놓고 00→07번을 실행합니다. **00번 `EP_BASE_DIR`를 실제 BASIC 경로로 지정하세요. 기본은 `E:\PHOTO_ANALYSIS\BASIC`이며 `Path.cwd()`를 사용하지 않습니다.** 기존 `MRC_PSM_decorrect.ipynb` 뒤에 붙일 필요가 없는 독립 노트북입니다. 기존 코드/입력 파일을 변경하지 않고 DB도 조회하지 않습니다. Notebook 내부에 기존 CPE38 수치 solver를 포함했으므로 별도 `.py` 파일은 필요 없습니다.
+
+이번 버전은 **KGVM·KHVF = Y만(Y17), PBVC(VC) = X만(X21)** 분석합니다. 00번 `EP_SOURCES`의 `axis`가 통계·배율 복원·유효 point 판정·참조 회귀·결과 저장 전체에 적용됩니다. 그래프는 각 제품의 해당 방향을 한 그림에서 비교하고 제품 이름에 `[X]`/`[Y]`를 표시합니다. 이전 버전과 결과가 섞이지 않도록 새 출력 폴더 `output_edge_inner_comparison_critical`을 사용합니다.
 
 ## 모아둘 입력
 
@@ -12,7 +14,7 @@
 예시 폴더:
 
 ```text
-C:\PHOTO_ANALYSIS\BASIC\
+E:\PHOTO_ANALYSIS\BASIC\
   OCO_Edge_Inner_Comparison.ipynb
   edge_comparison_input\
     KGVM\
@@ -26,17 +28,17 @@ C:\PHOTO_ANALYSIS\BASIC\
       extension_settings.json
 ```
 
-00번 `EP_SOURCES`의 제품명과 폴더를 실제 자료에 맞게 수정합니다. 폴더는 기존 `output_decorrect_notebook` 자체를 직접 지정해도 됩니다(그때는 point 파일을 `stages` 하위에서 읽음). Parquet 우선, 읽기 실패 시 같은 이름의 **전체** `.xlsx`로 대체하며 `_sample_...xlsx`는 읽지 않습니다. ADI 자료, 29~34 배율 sweep 결과, wafer context Excel은 필요 없습니다.
+00번 `EP_SOURCES`의 제품명·방향·폴더를 실제 자료에 맞게 수정합니다. 예: `{"product": "PBVC", "axis": "x", "folder": ...}`. 파일 폴더명 자체가 `VC`이면 folder만 해당 실제 경로로 바꿔도 됩니다. 폴더는 기존 `output_decorrect_notebook` 자체를 직접 지정해도 됩니다(그때는 point 파일을 `stages` 하위에서 읽음). Parquet 우선, 읽기 실패 시 같은 이름의 **전체** `.xlsx`로 대체하며 `_sample_...xlsx`는 읽지 않습니다. ADI 자료, 29~34 배율 sweep 결과, wafer context Excel은 필요 없습니다.
 
-필수 point 컬럼은 `LOT_ID`, `Wafer`, `fcp_x/y`, `coordinate_X/Y`, `raw_minus_total_fit_x/y`, `measurement_scale`입니다. 배율이 1이 아닌 point는 `X_reg_original/Y_reg_original`도 필요합니다. 반경은 기존 `radius`, 없거나 결측이면 `wf_x/y` 또는 `fcp+local` 좌표로 계산합니다. `DieX/DieY`와 photo 이력은 있으면 그대로 결과에 연결합니다. 기존 27번 전체 Parquet에는 이 값들이 포함됩니다. 한 LOT/wafer에 여러 photo 이력이 섞이면 실행별로 분리하도록 중단합니다.
+필수 point 컬럼은 `LOT_ID`, `Wafer`, `fcp_x/y`, `coordinate_X/Y`, `measurement_scale` 및 **선택한 방향의** `raw_minus_total_fit_x` 또는 `raw_minus_total_fit_y`입니다. 배율이 1이 아닌 유효 point는 같은 방향의 `X_reg_original` 또는 `Y_reg_original`도 필요합니다. 분석하지 않는 방향의 값은 없어도 됩니다. 반경은 기존 `radius`, 없거나 결측이면 `wf_x/y` 또는 `fcp+local` 좌표로 계산합니다. `DieX/DieY`와 photo 이력은 있으면 그대로 결과에 연결합니다. 기존 27번 전체 Parquet에는 이 값들이 포함됩니다. 한 LOT/wafer에 여러 photo 이력이 섞이면 실행별로 분리하도록 중단합니다.
 
 `extension_settings.json`은 `kmrc_definition=OCO_E1_RAW_MINUS_ADI_RAW`인 최신 K-MRC 방식의 자료여야 합니다. 과거 OCO E2 자체 regression 결과는 이 연구와 섞지 않습니다.
 
 ## 분석 설정
 
-- 기본 방향 `EP_AXES=["x"]`. 두 방향은 `["x", "y"]`로 변경합니다. **X21 / Y17 CPE38을 그대로 사용**하며 para 축소는 하지 않습니다.
+- 제품마다 `EP_SOURCES`의 `axis`를 `"x"` 또는 `"y"`로 지정합니다. **X21 / Y17 CPE38을 그대로 사용**하며 para 축소·좌표 회전은 하지 않습니다. `EP_AXES`는 내부에서 자동 생성되므로 직접 수정하지 않습니다.
 - 실제 측정점 반경 `<=144mm`는 INNER, `144mm 초과~147mm 이하`는 EDGE입니다. `EP_MAX_RADIUS_UM`으로 끝 반경을 바꿀 수 있습니다. 범위 밖·반경 미상 point 수는 `Input_audit`에 남깁니다.
-- X/Y·좌표가 모두 유효한 point를 참조 회귀에 사용합니다(기존 CPE 유효 mask와 같은 방향). 단순 입력 통계는 방향별 유효값을 사용합니다.
+- **선택한 방향 값과 X/Y 좌표**가 유효한 point를 참조 회귀에 사용합니다. 분석하지 않는 방향의 결측은 point를 제외하지 않습니다. 단순 입력 통계도 선택 방향의 유효값을 사용합니다.
 - 안쪽 참조 최소 point는 X `21+2`, Y `17+2`; 기본 추가 point `EP_MIN_EXTRA_INNER_POINTS=2`입니다. 부족한 shot의 예측을 억지로 계산하지 않습니다.
 - Full rank, scaled condition `<=1e6`, 실제 edge 예측 ridge noise gain `<=5`, 유한 예측, 저장된 G-opt 및 span 조건을 확인합니다. `EP_MAX_SCALED_CONDITION`과 `EP_MAX_EDGE_NOISE_GAIN`은 **연구용 진단 임계값이며 공정 spec이 아닙니다.**
 - Full rank라도 진단 기준을 넘으면 후보 예측을 보존하되 주요 예측 통계에서는 제외합니다. ridge가 미식별 문제를 가려버리지 않도록 rank 부족은 예측하지 않습니다.
@@ -63,7 +65,7 @@ Noise gain은 독립·동일 측정 noise에 대한 선형 ridge 예측 전달 �
 
 ## 결과를 볼 순서
 
-`output_edge_inner_comparison\OCO_Edge_Inner_Comparison.xlsx`:
+`output_edge_inner_comparison_critical\OCO_Edge_Inner_Comparison.xlsx`:
 
 | 시트 | 확인할 내용 |
 |---|---|
@@ -81,13 +83,13 @@ Noise gain은 독립·동일 측정 noise에 대한 선형 ridge 예측 전달 �
 
 `plots`의 PNG/PDF:
 
-1. `01_Input_M3S_X`: 제품별 안쪽·edge 입력 M3S 분포, 한 점=wafer.
-2. `02_Edge_vs_inner_input_X`: 같은 wafer의 안쪽 M3S 대 edge M3S, 제품별 색·범례.
-3. `03_Edge_prediction_error_X`: 제품별 edge 예측 RMSE와 signed mean. 안정적인 참조만 표시.
-4. `04_Reference_coverage_X`: 참조 가능한 shot 비율과 noise gain 대비 후보 예측 오차.
-5. `05_Radial_reference_error_X`: 반경별 참조 residual RMSE. 선은 wafer 중앙값, band는 25~75% 범위. 안쪽은 회귀에 사용한 값, edge는 예측값이므로 차이를 순수 noise 차이로 해석하지 않습니다.
+1. `01_Input_M3S_CRITICAL`: 제품별 안쪽·edge 입력 M3S 분포, 한 점=wafer. KGVM[Y], KHVF[Y], PBVC[X].
+2. `02_Edge_vs_inner_input_CRITICAL`: 같은 wafer의 안쪽 M3S 대 edge M3S, 제품·방향별 색·범례.
+3. `03_Edge_prediction_error_CRITICAL`: 제품별 edge 예측 RMSE와 해당 방향의 signed mean. 안정적인 참조만 표시.
+4. `04_Reference_coverage_CRITICAL`: 참조 가능한 shot 비율과 noise gain 대비 후보 예측 오차.
+5. `05_Radial_reference_error_CRITICAL`: 반경별 참조 residual RMSE. 선은 wafer 중앙값, band는 25~75% 범위. 안쪽은 회귀에 사용한 값, edge는 예측값이므로 차이를 순수 noise 차이로 해석하지 않습니다.
 
-`tables`에는 전체 통계 Parquet, `points`에는 edge가 포함된 shot의 point별 복원 입력·예측·오차·참조 상태를 제품별로 저장합니다. 파일 `Product_01/02/03_edge_shots.parquet`의 번호는 00번 `EP_SOURCES` 순서입니다. 제품명은 파일 내부 `product` 컬럼에 있습니다. `input100`, `inner_prediction`, `reference_residual`, `edge_deviation`은 **µm**, 통계표·그래프만 **nm**입니다.
+`tables`에는 전체 통계 Parquet, `points`에는 edge가 포함된 shot의 point별 복원 입력·예측·오차·참조 상태를 제품별로 저장합니다. 파일 `Product_01/02/03_edge_shots.parquet`의 번호는 00번 `EP_SOURCES` 순서입니다. 제품명은 `product`, 분석 방향은 `analysis_axis`에 기록하고 해당 방향의 값만 저장합니다. Excel 통계표에는 실제 방향을 `axis` 컬럼에 유지합니다. `input100`, `inner_prediction`, `reference_residual`, `edge_deviation`은 **µm**, 통계표·그래프만 **nm**입니다.
 
 `reference_residual`은 full-rank 후보 참조의 오차(불안정 후보 포함), `edge_deviation`은 주요 통계에 사용한 eligible EDGE point의 오차입니다. 제품별 원래 설정과 분석 임계값은 `comparison_settings.json`에 기록합니다.
 
@@ -95,4 +97,4 @@ Noise gain은 독립·동일 측정 noise에 대한 선형 ridge 예측 전달 �
 
 ## 검증
 
-합성 자료 기반 8개 테스트: 배율 복원과 반경 경계, 알려진 edge-only 오차 복원, edge 값이 참조 추정에 들어가지 않음, rank/noise screening과 NA 처리, 제품별 설정 독립 복원, 전체 Excel 대체와 sample 제외, 기존 solver와 실제 ridge/span 제약 작동 결과 일치, 3제품 및 edge 없는 경우의 실제 Jupyter 실행·Excel/Parquet/그래프 저장을 확인했습니다. 실제 사내 자료나 DB는 사용하지 않았습니다.
+합성 자료 기반 9개 테스트: 배율 복원과 반경 경계, 알려진 edge-only 오차 복원, edge 값이 참조 추정에 들어가지 않음, rank/noise screening과 NA 처리, 제품별 설정 독립 복원, 전체 Excel 대체와 sample 제외, 기존 solver와 실제 ridge/span 제약 작동 결과 일치, 제품별 Y/Y/X 방향 및 17/17/21 para 적용, 비선택 방향이 아예 없는 입력, 임시 커널 폴더와 다른 명시적 기준 경로, 3제품 및 edge 없는 경우의 실제 Jupyter 실행·Excel/Parquet/통합 그래프 저장을 확인했습니다. 실제 사내 자료나 DB는 사용하지 않았습니다.

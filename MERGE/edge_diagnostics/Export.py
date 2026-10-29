@@ -1,11 +1,14 @@
 # %% 07. Excel·전체 통계 Parquet·설정 저장
 ep_notes = pd.DataFrame([
     ["입력", "제품별 27_OCO_FINAL_POINTS 전체 Parquet(또는 전체 Excel) + 같은 실행의 extension_settings.json. ADI/sweep 파일 불필요."],
+    ["제품별 방향", "; ".join(f"{product}: {axes[0].upper()}" for product, axes in EP_PRODUCT_AXES.items())],
+    ["회귀 및 비교", "각 제품에서 지정한 방향만 통계·회귀·예측. X는 기존 X21, Y는 기존 Y17을 사용하며 회전하지 않음. CRITICAL 그래프는 제품별 해당 방향을 함께 표시하고 축/범례에 X/Y 명시."],
     ["분석 값", "input100 = 저장된 raw_minus_total_fit + (1-measurement_scale)*원래 X/Y 측정값. 기적용 MRC/PSM decorrection 및 고정 K-MRC는 유지. 최종 residual 자체를 역배율로 나누지 않음."],
     ["영역", "실제 point 반경 <=144mm: INNER. 144mm 초과~147mm 이하: EDGE. 반경 미상/범위 밖 제외 수는 Input_audit에 기록."],
     ["입력 통계", "CPE 제거 전 input100의 mean/3sigma/M3S/RMSE. 위치·실제 변형 차이가 섞이므로 edge 측정 noise만의 크기로 해석하지 않음."],
     ["참조 모델", "같은 shot의 INNER 유효 point만 사용해 기존 CPE38(X21/Y17) 회귀. EDGE 값은 회귀 입력·ridge/span 선택에 사용하지 않음. 좌표와 shot metadata는 평가 grid에 사용."],
     ["설정", "제품별 28번 ridge/G-opt/span/virtual 설정 복원. 가상 point의 radius clip은 저장된 설정 그대로. 실제 EDGE point의 예측 noise gain은 별도 계산."],
+    ["유효 point", "선택한 방향 값과 X/Y 좌표가 유효한 point만 참조 회귀에 사용. 분석하지 않는 방향의 결측은 선택 방향 분석에 영향을 주지 않음."],
     ["내측 최소 point", f"X 21 + {EP_MIN_EXTRA_INNER_POINTS}, Y 17 + {EP_MIN_EXTRA_INNER_POINTS}; para 수 축소 없음. 부족/미식별 shot은 예측하지 않음."],
     ["참조 screening", f"안쪽 scaled design full rank, condition <= {EP_MAX_SCALED_CONDITION:g}, edge ridge noise gain <= {EP_MAX_EDGE_NOISE_GAIN:g}, 유한 예측·G-opt·span 확인. 이 임계값은 연구용 진단 설정이며 공정 spec이 아님."],
     ["noise gain", "독립·동일 측정 noise 가정의 선형 ridge 전달 행렬 행 norm. Box 제약이 작동하면 근사값. 낮아도 모델 편향·물리적 외삽 오차가 없음을 보장하지 않음."],
@@ -42,7 +45,7 @@ with pd.ExcelWriter(ep_excel_path, engine="openpyxl") as writer:
         for offset in range(0, max(1, len(export)), 1048575):
             suffix = "" if len(export) <= 1048575 else f"_{offset//1048575+1}"
             export.iloc[offset:offset+1048575].to_excel(writer, sheet_name=name[:31-len(suffix)]+suffix, index=False)
-ep_configuration = dict(sources=ep_run_sources, axes=EP_AXES, inner_radius_um=EP_INNER_RADIUS_UM, max_radius_um=EP_MAX_RADIUS_UM, std_ddof=EP_STD_DDOF,
+ep_configuration = dict(sources=ep_run_sources, product_axes=EP_PRODUCT_AXES, axes=EP_AXES, inner_radius_um=EP_INNER_RADIUS_UM, max_radius_um=EP_MAX_RADIUS_UM, std_ddof=EP_STD_DDOF,
     minimum_extra_inner_points=EP_MIN_EXTRA_INNER_POINTS, max_scaled_condition=EP_MAX_SCALED_CONDITION, max_edge_noise_gain=EP_MAX_EDGE_NOISE_GAIN,
     svd_rcond=EP_SVD_RCOND, radial_bins_mm=EP_RADIAL_BINS_MM.tolist(), point_unit="um", statistics_unit="nm", fixed_kmrc=True, edge_values_used_for_reference_fit=False)
 (EP_OUTPUT_DIR / "comparison_settings.json").write_text(json.dumps(ep_configuration, ensure_ascii=False, indent=2), encoding="utf-8")

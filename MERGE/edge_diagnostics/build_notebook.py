@@ -45,11 +45,11 @@ sources = {0: helper("Inputs.py"), 1: helper("Statistics.py"), 2: rename(solver[
 titles = ["제품별 입력 폴더·분석 설정", "통계·저장된 제품별 설정 복원 함수", "기존 CPE38 모델·virtual grid", "기존 ridge/G-opt/span solver",
           "안쪽-only CPE38 참조 및 edge 예측", "제품별 실행·wafer/shot 비교표", "제품별 그래프", "Excel·전체 Parquet·실행 설정 저장"]
 intro = """# OCO 제품별 edge / 안쪽 패턴 비교
-기존 27·28번 저장 자료만 읽는 독립 노트북입니다. `C:\\PHOTO_ANALYSIS\\BASIC`에 놓고 **00번의 제품별 입력 폴더를 지정한 뒤 00→07 순서**로 실행하세요.
+기존 27·28번 저장 자료만 읽는 독립 노트북입니다. **00번 EP_BASE_DIR를 실제 BASIC 폴더 경로로 지정한 뒤 00→07 순서**로 실행하세요. 기본값은 `E:\\PHOTO_ANALYSIS\\BASIC`입니다. 커널의 임시 작업 폴더를 기준으로 삼지 않습니다.
 
 제품마다 `27_OCO_FINAL_POINTS.parquet`와 같은 실행의 `extension_settings.json` 두 파일이 필요합니다. 전체 Excel도 지원하며 `_sample` 파일은 사용하지 않습니다. 기존 output 폴더 전체를 지정하면 stages 하위도 읽습니다. ADI 및 배율 sweep 파일은 불필요합니다.
 
-배율 적용 전 CPE 입력(기존 decorrection·K-MRC 유지)을 복원합니다. 전체 wafer의 안쪽/edge 입력 통계와, 안쪽 point만으로 CPE38을 추정한 edge 예측 오차를 구분합니다. 예측 불안정/불가능 shot은 이유와 coverage를 기록합니다. 파라미터 수를 줄이지 않습니다. 기본 X만 분석하며 설정에서 Y도 추가할 수 있습니다. DB 조회·기존 파일 수정은 하지 않습니다.
+배율 적용 전 CPE 입력(기존 decorrection·K-MRC 유지)을 복원합니다. 전체 wafer의 안쪽/edge 입력 통계와, 안쪽 point만으로 CPE38을 추정한 edge 예측 오차를 구분합니다. 예측 불안정/불가능 shot은 이유와 coverage를 기록합니다. **KGVM·KHVF는 Y17, PBVC(VC)는 X21**만 분석합니다. 제품별 방향은 00번 EP_SOURCES의 axis로 지정합니다. 그래프는 각 제품의 지정 방향을 함께 비교하며 축/범례에 X/Y를 명시합니다. DB 조회·기존 파일 수정은 하지 않습니다.
 """
 cells = [dict(cell_type="markdown", id="edge-comparison-intro", metadata={}, source=intro)]
 for number, source in sources.items():

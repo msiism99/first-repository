@@ -121,6 +121,34 @@ class DiagnosticsTests(unittest.TestCase):
         pd.testing.assert_frame_equal(coefficients[0],coefficients[1])
         pd.testing.assert_frame_equal(coefficients[0],coefficients[2])
 
+    def test_product_axis_uses_only_selected_values_and_parameter_bank(self):
+        ns=namespace(self.document)
+        options=ns["ep_restore_settings"](settings_for(ns))
+        for product,axis in [("KGVM","y"),("KHVF","y"),("PBVC","x")]:
+            source=fixture()
+            inactive="y" if axis=="x" else "x"
+            baseline,_=ns["ep_prepare_points"](source,product,axes=[axis])
+            _,_,expected_coef=ns["ep_fit_inner_reference"](baseline,options,axes=[axis])
+            source=source.drop(columns=[f"raw_minus_total_fit_{inactive}",f"{inactive.upper()}_reg_original"])
+            points,_=ns["ep_prepare_points"](source,product,axes=[axis])
+            result,diag,coef=ns["ep_fit_inner_reference"](points,options,axes=[axis])
+            self.assertTrue(points._fit_valid.all())
+            self.assertNotIn(f"input100_{inactive}",result)
+            self.assertNotIn(f"edge_deviation_{inactive}",result)
+            self.assertEqual(set(diag.axis),{axis})
+            self.assertEqual(set(diag.n_parameters),{21 if axis=="x" else 17})
+            pd.testing.assert_frame_equal(coef,expected_coef)
+            for table in [ns["ep_input_stats"](points,ns["EP_WAFER_KEYS"],axes=[axis]),ns["ep_prediction_stats"](result,ns["EP_WAFER_KEYS"],axes=[axis])]:
+                self.assertEqual(set(table.axis),{axis})
+        source=fixture()
+        good_inner=source.index[source.fcp_x.eq(138000.)&source.radius.le(144000.)]
+        source=source.drop(index=good_inner[20:])
+        for axis in ["x","y"]:
+            points,_=ns["ep_prepare_points"](source,"TEST",axes=[axis])
+            _,diag,_=ns["ep_fit_inner_reference"](points,options,axes=[axis])
+            status=diag.loc[diag.fcp_x.eq(138000.),"status"].iloc[0]
+            self.assertEqual("too_few_inner_points" in status,axis=="x")
+
     def test_rank_and_noise_screening_do_not_report_zero_error(self):
         ns=namespace(self.document)
         options=ns["ep_restore_settings"](settings_for(ns))
@@ -208,19 +236,30 @@ class DiagnosticsTests(unittest.TestCase):
                 destination=root/"stages" if index==1 else root
                 destination.mkdir(exist_ok=True)
                 frame=fixture((index+1)*.001,no_edge=no_edge)
+                inactive="y" if product=="PBVC" else "x"
+                frame=frame.drop(columns=[f"raw_minus_total_fit_{inactive}",f"{inactive.upper()}_reg_original"])
                 frame.to_parquet(destination/"27_OCO_FINAL_POINTS.parquet",index=False)
                 settings=settings_for(ns)
                 settings["ridge_valves"]["RK7"]=[.7,1.3,2.][index]
                 (root/"extension_settings.json").write_text(json.dumps(settings))
                 input_bytes[destination/"27_OCO_FINAL_POINTS.parquet"]=(destination/"27_OCO_FINAL_POINTS.parquet").read_bytes()
             notebook=nbformat.read(HERE/"OCO_Edge_Inner_Comparison.ipynb",as_version=4)
+            setup=next(c for c in notebook.cells if c.cell_type=="code" and c.id=="edge-comparison-0")
+            setup.source="\n".join(f"EP_BASE_DIR = Path({str(folder)!r})" if line.startswith("EP_BASE_DIR =") else line for line in setup.source.splitlines())
+            working=folder/"kernel_temp"
+            working.mkdir()
             with patch.dict(os.environ,{"IPYTHONDIR":str(folder/"ipython"),"JUPYTER_RUNTIME_DIR":str(folder/"runtime")}):
-                executed=NotebookClient(notebook,kernel_name="python3",timeout=240).execute(cwd=str(folder))
-            output=folder/"output_edge_inner_comparison"
+                executed=NotebookClient(notebook,kernel_name="python3",timeout=240).execute(cwd=str(working))
+            output=folder/"output_edge_inner_comparison_critical"
             reports=pd.read_excel(output/"OCO_Edge_Inner_Comparison.xlsx",sheet_name=None)
             summary=reports["Product_summary"]
             self.assertEqual(set(summary["product"]),{"KGVM","KHVF","PBVC"})
             self.assertTrue(summary.n_wafers.eq(1).all())
+            self.assertEqual(summary.set_index("product").axis.to_dict(),{"KGVM":"y","KHVF":"y","PBVC":"x"})
+            for sheet in ["Wafer_input_stats","Wafer_input_comparison","Wafer_prediction","Shot_input_stats","Shot_prediction","Shot_reference","Radial_profile"]:
+                table=reports[sheet]
+                for product,axis in [("KGVM","y"),("KHVF","y"),("PBVC","x")]:
+                    self.assertTrue(table.loc[table["product"].eq(product),"axis"].eq(axis).all())
             if no_edge:
                 self.assertTrue(summary.n_edge_total.eq(0).all())
                 self.assertTrue(summary.median_wafer_edge_prediction_RMSE_nm.isna().all())
@@ -229,18 +268,27 @@ class DiagnosticsTests(unittest.TestCase):
                 self.assertTrue(summary.n_eligible_shots.eq(1).all(),summary.to_string())
                 self.assertTrue(summary.edge_prediction_coverage.gt(0).all())
                 np.testing.assert_allclose(summary.median_wafer_edge_prediction_RMSE_nm,[1.,2.,3.],rtol=0,atol=1e-7)
+                np.testing.assert_allclose(summary.median_wafer_edge_prediction_mean_nm,[-1.,-2.,3.],rtol=0,atol=1e-7)
                 diag=reports["Shot_reference"]
                 self.assertTrue(diag.photo_transn_seq.astype(str).eq("9007199254741999").all())
+                self.assertTrue(diag.loc[diag.axis.eq("y"),"n_parameters"].eq(17).all())
+                self.assertTrue(diag.loc[diag.axis.eq("x"),"n_parameters"].eq(21).all())
                 for index in range(3):
                     points=pd.read_parquet(output/"points"/f"Product_{index+1:02d}_edge_shots.parquet")
                     self.assertEqual(set(points["product"]),{["KGVM","KHVF","PBVC"][index]})
-                    values=points.loc[points.edge_deviation_x.notna(),"edge_deviation_x"]*1000
+                    axis="x" if index==2 else "y"
+                    inactive="y" if axis=="x" else "x"
+                    self.assertTrue(points.analysis_axis.eq(axis).all())
+                    self.assertNotIn(f"edge_deviation_{inactive}",points)
+                    values=points.loc[points[f"edge_deviation_{axis}"].notna(),f"edge_deviation_{axis}"]*1000
                     self.assertAlmostEqual(np.sqrt(np.mean(values**2)),index+1,places=7)
             for path,content in input_bytes.items():
                 self.assertEqual(path.read_bytes(),content)
             self.assertEqual(len(list((output/"plots").glob("*.png"))),5)
+            self.assertTrue(all(p.stem.endswith("_CRITICAL") for p in (output/"plots").glob("*.png")))
             saved=json.loads((output/"comparison_settings.json").read_text())
             self.assertEqual([source["original_settings"]["ridge_valves"]["RK7"] for source in saved["sources"]],[.7,1.3,2.])
+            self.assertEqual(saved["product_axes"],{"KGVM":["y"],"KHVF":["y"],"PBVC":["x"]})
             artifact=Path('/tmp/edge-inner-diagnostics-tests')/('no_edge' if no_edge else 'three_products')
             artifact.mkdir(parents=True,exist_ok=True)
             nbformat.write(executed,artifact/"executed.ipynb")

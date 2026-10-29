@@ -25,9 +25,10 @@ def ep_group_stats(frame, keys, value_col, skeleton=None):
     return result
 
 
-def ep_input_stats(points, keys):
+def ep_input_stats(points, keys, axes=None):
+    axes = EP_AXES if axes is None else axes
     tables = []
-    for axis in EP_AXES:
+    for axis in axes:
         for region in ["INNER", "EDGE"]:
             table = ep_group_stats(points.loc[points.region.eq(region)], keys, f"input100_{axis}", skeleton=points)
             table["axis"], table["region"] = axis, region

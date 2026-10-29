@@ -24,9 +24,10 @@ def ep_ridge_edge_gain(X, X_edge, lambdas):
     return float(gains.max()), float(np.sqrt(np.mean(gains**2)))
 
 
-def ep_fit_inner_reference(points, options):
+def ep_fit_inner_reference(points, options, axes=None):
+    axes = EP_AXES if axes is None else axes
     out = points.copy()
-    for axis in EP_AXES:
+    for axis in axes:
         out[f"inner_prediction_{axis}"], out[f"reference_residual_{axis}"], out[f"edge_deviation_{axis}"] = np.nan, np.nan, np.nan
         out[f"reference_eligible_{axis}"] = False
         out[f"reference_status_{axis}"] = "no_edge"
@@ -38,7 +39,7 @@ def ep_fit_inner_reference(points, options):
         identity = dict(zip(EP_SHOT_KEYS, key))
         identity.update({col: shot[col].iloc[0] if col in shot else np.nan for col in ["DieX", "DieY", "photo_transn_seq"]})
         for axis_index, axis in enumerate(["x", "y"]):
-            if axis not in EP_AXES:
+            if axis not in axes:
                 continue
             names = EP_CPE38_KEYS_DX if axis == "x" else EP_CPE38_KEYS_DY
             row = dict(identity, axis=axis, n_inner=len(inner), n_edge=len(edge), n_parameters=len(names), eligible=False, status="not_evaluated",

@@ -1,5 +1,6 @@
 # %% 06. 제품별 입력 통계·edge 예측 오차·예측 가능 범위 그래프
 ep_products = [str(s["product"]) for s in EP_SOURCES]
+ep_product_labels = {p: f"{p} [{EP_PRODUCT_AXES[p][0].upper()}]" for p in ep_products}
 ep_colors = dict(zip(ep_products, plt.get_cmap("tab10")(np.linspace(0, .9, len(ep_products)))))
 ep_plot_paths = []
 
@@ -22,7 +23,7 @@ def ep_boxplot(panel, data, column, title):
             panel.scatter(index+rng.uniform(-.12, .12, len(values)), values, s=14, alpha=.65, color=ep_colors[product])
         else:
             panel.text(index, .5, "No eligible data", ha="center", rotation=90, transform=panel.get_xaxis_transform())
-    labels = [f"{p}\nN={data.loc[data['product'].eq(p), column].notna().sum()} wafers" for p in ep_products]
+    labels = [f"{ep_product_labels[p]}\nN={data.loc[data['product'].eq(p), column].notna().sum()} wafers" for p in ep_products]
     panel.set_xticks(np.arange(len(ep_products)), labels)
     panel.set_xlim(-.6, len(ep_products)-.4)
     panel.set_title(title)
@@ -30,9 +31,10 @@ def ep_boxplot(panel, data, column, title):
     panel.grid(axis="y", alpha=.25)
 
 
-for axis in EP_AXES:
-    base = ep_wafer_comparison.loc[ep_wafer_comparison.axis.eq(axis)]
-    prediction = ep_wafer_prediction.loc[ep_wafer_prediction.axis.eq(axis)]
+for axis in ["critical"]:
+    # 제품별 설정 방향을 같은 그림에 표시. Excel의 axis는 실제 x/y를 유지.
+    base = ep_wafer_comparison
+    prediction = ep_wafer_prediction
     fig, panels = plt.subplots(1, 2, figsize=(13, 5))
     ep_boxplot(panels[0], base, "M3S_nm_inner", "R <= 144 mm: |mean| + 3 sigma")
     ep_boxplot(panels[1], base, "M3S_nm_edge", "144 < R <= 147 mm: |mean| + 3 sigma")
@@ -43,7 +45,7 @@ for axis in EP_AXES:
     fig, panel = plt.subplots(figsize=(7, 6))
     for product in ep_products:
         part = base.loc[base["product"].eq(product)].dropna(subset=["M3S_nm_inner", "M3S_nm_edge"])
-        panel.scatter(part.M3S_nm_inner, part.M3S_nm_edge, color=ep_colors[product], s=22, alpha=.7, label=f"{product} (N={len(part)})")
+        panel.scatter(part.M3S_nm_inner, part.M3S_nm_edge, color=ep_colors[product], s=22, alpha=.7, label=f"{ep_product_labels[product]} (N={len(part)})")
     limits = base[["M3S_nm_inner", "M3S_nm_edge"]].to_numpy(float)
     finite = limits[np.isfinite(limits)]
     if len(finite):
@@ -63,7 +65,7 @@ for axis in EP_AXES:
     fig.tight_layout()
     ep_save_plot(fig, f"03_Edge_prediction_error_{axis.upper()}")
 
-    diag = ep_reference_diagnostics.loc[ep_reference_diagnostics.axis.eq(axis)]
+    diag = ep_reference_diagnostics
     fig, panels = plt.subplots(1, 2, figsize=(14, 5))
     for index, product in enumerate(ep_products):
         part = diag.loc[diag["product"].eq(product)]
@@ -72,8 +74,8 @@ for axis in EP_AXES:
         panels[0].text(index, len(part), f"{int(part.eligible.sum())}/{len(part)}", ha="center", va="bottom")
         for eligible, marker in [(True, "o"), (False, "x")]:
             selected = part.loc[part.eligible.eq(eligible)].dropna(subset=["ridge_edge_noise_gain_max", "candidate_edge_RMSE_nm"])
-            panels[1].scatter(selected.ridge_edge_noise_gain_max, selected.candidate_edge_RMSE_nm, color=ep_colors[product], marker=marker, s=23, alpha=.7, label=f"{product}: {'eligible' if eligible else 'excluded'}")
-    panels[0].set_xticks(np.arange(len(ep_products)), ep_products)
+            panels[1].scatter(selected.ridge_edge_noise_gain_max, selected.candidate_edge_RMSE_nm, color=ep_colors[product], marker=marker, s=23, alpha=.7, label=f"{ep_product_labels[product]}: {'eligible' if eligible else 'excluded'}")
+    panels[0].set_xticks(np.arange(len(ep_products)), [ep_product_labels[p] for p in ep_products])
     panels[0].set(ylabel="Shot count", title="Eligible / all shots with edge points (gray = all)")
     panels[1].axvline(EP_MAX_EDGE_NOISE_GAIN, color="gray", linestyle=":")
     panels[1].set(xlabel="Max edge prediction noise gain (linear ridge proxy)", ylabel="Candidate edge prediction RMSE [nm]", title="Geometry / regularization diagnostic")
@@ -84,7 +86,7 @@ for axis in EP_AXES:
     ep_save_plot(fig, f"04_Reference_coverage_{axis.upper()}")
 
     fig, panel = plt.subplots(figsize=(10, 5))
-    profile = ep_radial_profiles.loc[ep_radial_profiles.axis.eq(axis)]
+    profile = ep_radial_profiles
     any_profile = False
     for product in ep_products:
         part = profile.loc[profile["product"].eq(product)]
@@ -92,7 +94,7 @@ for axis in EP_AXES:
             continue
         grouped = part.groupby("radius_mid_mm", observed=True).RMSE_nm
         median, lower, upper = grouped.median(), grouped.quantile(.25), grouped.quantile(.75)
-        panel.plot(median.index, median.to_numpy(), ".-", color=ep_colors[product], label=product)
+        panel.plot(median.index, median.to_numpy(), ".-", color=ep_colors[product], label=ep_product_labels[product])
         panel.fill_between(median.index, lower.to_numpy(), upper.to_numpy(), alpha=.15, color=ep_colors[product])
         any_profile = True
     panel.axvline(EP_INNER_RADIUS_UM/1000, color="black", linestyle=":", label="144 mm boundary")
