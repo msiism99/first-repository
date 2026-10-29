@@ -97,6 +97,18 @@ Edge 없는 shot은 기준 CPE를 재사용합니다. 두 회귀 반경에서 �
 
 이번 실험은 최외곽 공간 영역과 point 개수를 함께 바꾸므로 순수 point 수 효과로 해석하지 않습니다. 최적 배율은 시험 후보 중 결과이며 rework 판정 기준을 자동 결정하지 않습니다.
 
+## 10번: 제품별 측정 위치 wafer map
+
+기존 09번 뒤에 `OCO_Edge_Wafer_Map_10.ipynb`의 10번 코드 셀 또는 `Wafer_Map_10.py` 내용을 붙여 실행합니다. 전체 notebook에도 10번을 추가했습니다. 기존 00번의 경로·입력 함수만 실행되어 있으면 동작하므로 CPE 01~09번을 다시 실행할 필요 없습니다.
+
+원래 27번 전체 point 자료를 다시 읽어 제품마다 측정 위치가 가장 많이 들어 있는 wafer 하나를 자동 선택합니다. 기본 sampling이 같은 제품의 대표 map입니다. `WM_SELECT={"KGVM":("LOT_ID",11)}`처럼 직접 wafer를 지정할 수도 있습니다.
+
+Point 색: <=144mm 파랑 / 144mm 초과~146mm 이하 주황 / 146mm 초과~147mm 이하 빨강. 좌표가 유효한 실제 측정 위치만 찍고 같은 위치는 중복 제거합니다. 147mm 초과 측정점은 지도에서 제외하며 개수는 index에 기록합니다. 계측값·CPE·배율은 표시하지 않습니다. 좌표는 wf_x/y 우선, 두 좌표가 함께 유효하지 않으면 fcp+local을 사용하며 반경도 지도에 찍는 좌표에서 계산합니다.
+
+Wafer 외곽 **R=150mm 검은 실선**, **R=144mm 검은 점선**. 실측 shot 중심과 STEP_PITCH_X/Y에서 계산한 shot 경계만 검은 실선으로 그리고 150mm wafer 내부로 clip합니다. 측정되지 않은 shot의 data나 경계를 임의 생성하지 않습니다. STEP_PITCH가 없다면 실제 pitch를 WM_PITCH_OVERRIDE_UM에 µm로 지정하세요.
+
+`plots/10_Wafer_Map_Product_01/02/03.png/.pdf`에 저장하며 제품명·LOT/wafer는 그림 제목과 `10_Wafer_Map_Index.xlsx`에서 확인합니다. Index에는 세 구간의 위치 수와 shot 수, 제외된 좌표 수를 기록하며 계측값은 포함하지 않습니다.
+
 ## 검증
 
 합성 자료 기반 7개 테스트로 기존 native 전체 회귀와 영향 shot만 재계산한 결과의 일치, 기존 CPE 기준 재현, 배율 복원·고정 보정 유지, 144/146/147mm 경계, 같은 shot의 입력 차이와 실제 point 비율, 146~147mm 제외 point 예측, 학습점 0개 및 엄격한 평가 coverage, G-opt 캐시 재실행, 3제품 20조건과 edge 없는 경우의 실제 Jupyter 실행·Excel/Parquet/그래프 저장을 확인했습니다. 실제 사내 데이터나 DB를 사용하지 않았습니다.

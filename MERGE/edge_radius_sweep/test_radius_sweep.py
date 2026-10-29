@@ -235,7 +235,7 @@ class RadiusTests(unittest.TestCase):
             self.assertEqual(set(metrics.scale_pct),set(range(10,101,10)))
             self.assertEqual(len(metrics),3*3*20*4)
             self.assertEqual(len(list((output/"cases").glob("*_Wafer_M3S.parquet"))),60)
-            self.assertEqual(len(list((output/"plots").glob("*.png"))),10)
+            self.assertEqual(len(list((output/"plots").glob("*.png"))),13)
             for product,axis in [("KGVM","y"),("KHVF","y"),("PBVC","x")]:
                 self.assertTrue(metrics.loc[metrics["product"].eq(product),"axis"].eq(axis).all())
             unchanged=metrics.loc[metrics.LOT_ID.eq("B")&metrics.scope.eq("ALL_SHOTS")]

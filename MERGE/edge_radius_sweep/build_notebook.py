@@ -44,9 +44,9 @@ def helper(name):
 input_source=(MERGE/"edge_diagnostics"/"Inputs.py").read_text(encoding="utf-8")
 input_functions="\n\n".join(ast.get_source_segment(input_source,n) for n in ast.parse(input_source).body if isinstance(n,ast.FunctionDef))
 sources={0:helper("Inputs.py").replace("# INPUT_HELPERS",input_functions),1:(MERGE/"edge_diagnostics"/"Statistics.py").read_text(encoding="utf-8"),
-    2:rename(solver[22]+"\n"+solver[23]),3:rename(solver[24]+"\n"+solver[25]),4:helper("Engine.py"),5:helper("Sampling.py"),6:helper("Run.py"),7:helper("Summary.py"),8:helper("Plots.py"),9:helper("Export.py")}
+    2:rename(solver[22]+"\n"+solver[23]),3:rename(solver[24]+"\n"+solver[25]),4:helper("Engine.py"),5:helper("Sampling.py"),6:helper("Run.py"),7:helper("Summary.py"),8:helper("Plots.py"),9:helper("Export.py"),10:helper("Wafer_Map_10.py")}
 titles=["제품별 입력·방향·반경·배율 설정","통계 및 저장 설정 복원 함수","기존 CPE38 모델·virtual grid","기존 ridge/G-opt/span solver","Shot 회귀·캐시·평가·재현 검사",
-    "실제 point 비율·동일 mixed shot 입력 차이","제품별 실행: 146/147mm × 10~100%","같은 wafer 집합의 비교표·최적 배율","제품·wafer 비교 그래프","Excel·전체 Parquet·설정 저장"]
+    "실제 point 비율·동일 mixed shot 입력 차이","제품별 실행: 146/147mm × 10~100%","같은 wafer 집합의 비교표·최적 배율","제품·wafer 비교 그래프","Excel·전체 Parquet·설정 저장","제품별 측정 위치 wafer map"]
 intro="""# OCO edge 회귀 반경 × 배율 비교
 제품마다 기존 `27_OCO_FINAL_POINTS.parquet`와 같은 실행의 `extension_settings.json`만 필요합니다. 기존 output 폴더 또는 두 파일을 모아 둔 폴더를 00번에 지정하세요. **EP_BASE_DIR 기본 E:\\PHOTO_ANALYSIS\\BASIC 경로를 실제 BASIC 경로로 수정한 뒤 00→09 순서로 실행**합니다. DB 조회·기존 notebook 수정은 없습니다.
 
@@ -65,8 +65,14 @@ for number,source in sources.items():
 notebook=dict(nbformat=4,nbformat_minor=5,metadata=document["metadata"],cells=cells)
 path=HERE/"OCO_Edge_Radius_Sweep.ipynb"
 path.write_text(json.dumps(notebook,ensure_ascii=False,indent=1)+"\n",encoding="utf-8")
+append=dict(nbformat=4,nbformat_minor=5,metadata=document["metadata"],cells=cells[-2:])
+append_path=HERE/"OCO_Edge_Wafer_Map_10.ipynb"
+append_path.write_text(json.dumps(append,ensure_ascii=False,indent=1)+"\n",encoding="utf-8")
 with zipfile.ZipFile(HERE/"OCO_Edge_Radius_Sweep_Package.zip","w",compression=zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
-    for member in [path,HERE/"README.md"]:
+    for member in [path,append_path,HERE/"Wafer_Map_10.py",HERE/"README.md"]:
+        archive.writestr(member.name,member.read_bytes())
+with zipfile.ZipFile(HERE/"OCO_Edge_Wafer_Map_10_Package.zip","w",compression=zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
+    for member in [append_path,HERE/"Wafer_Map_10.py",HERE/"README_Wafer_Map_10.md"]:
         archive.writestr(member.name,member.read_bytes())
 print("Notebook:",path.stat().st_size,"bytes; max cell:",max(len(s.splitlines()) for s in sources.values()))
 print("ZIP:",(HERE/"OCO_Edge_Radius_Sweep_Package.zip").stat().st_size,"bytes")
